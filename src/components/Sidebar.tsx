@@ -1,0 +1,264 @@
+import { useState } from 'react';
+import { 
+  LayoutGrid, Star, Pin, Plus, Trash2, 
+  Download, Upload, ChevronLeft, ChevronRight,
+  Zap, Circle
+} from 'lucide-react';
+import type { Category } from '../types';
+import { CategoryIcon } from './CategoryIcon';
+
+interface SidebarProps {
+  categories: Category[];
+  selectedCategoryId: string | null; // 'all', 'favorites', 'pinned', or a category UUID
+  onSelectCategory: (id: string | null) => void;
+  onAddCategory: (name: string, icon: string, color: string) => void;
+  onDeleteCategory: (id: string) => void;
+  onExportBackup: () => void;
+  onImportBackup: () => void;
+}
+
+const PRESET_ICONS = ['Code', 'Image', 'Megaphone', 'PenTool', 'Zap', 'Target', 'FileText', 'MessageSquare', 'Layers', 'Smile'];
+const PRESET_COLORS = ['#8B5CF6', '#06B6D4', '#10B981', '#F43F5E', '#F59E0B', '#EC4899', '#3B82F6', '#6366F1'];
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  categories,
+  selectedCategoryId,
+  onSelectCategory,
+  onAddCategory,
+  onDeleteCategory,
+  onExportBackup,
+  onImportBackup
+}) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatIcon, setNewCatIcon] = useState('Zap');
+  const [newCatColor, setNewCatColor] = useState('#8B5CF6');
+
+  const handleCreateCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+    onAddCategory(newCatName.trim(), newCatIcon, newCatColor);
+    setNewCatName('');
+    setShowAddForm(false);
+  };
+
+  return (
+    <aside 
+      className={`glass-panel h-full flex flex-col transition-all duration-300 relative border-r border-obsidian-800 ${
+        isCollapsed ? 'w-[70px]' : 'w-[280px]'
+      }`}
+    >
+      {/* Collapse Toggle Button */}
+      <button 
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="titlebar-nodrag absolute -right-3 top-16 bg-obsidian-850 border border-obsidian-700 text-obsidian-400 hover:text-cyber-violet rounded-full p-1 cursor-pointer z-50 transition-all duration-200"
+      >
+        {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+      </button>
+
+      {/* App Header Branding */}
+      <div className="titlebar-drag p-6 pb-4 flex items-center gap-3">
+        <div className="titlebar-nodrag flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-cyber shadow-glow-violet">
+          <Zap className="text-white" size={16} />
+        </div>
+        {!isCollapsed && (
+          <div className="flex flex-col">
+            <span className="font-extrabold tracking-wider bg-gradient-cyber bg-clip-text text-transparent text-lg">PROMPTVAULT</span>
+            <span className="text-[10px] text-obsidian-400 font-medium uppercase tracking-widest mt-[-2px]">Local OS v1.0</span>
+          </div>
+        )}
+      </div>
+
+      {/* Main Sidebar Links / Scrolling Region */}
+      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-6">
+        
+        {/* Smart Quick Filters */}
+        <div className="space-y-1">
+          {!isCollapsed && <h3 className="px-3 text-[11px] font-bold text-obsidian-400 uppercase tracking-widest mb-2">Filters</h3>}
+          
+          <button
+            onClick={() => onSelectCategory(null)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
+              selectedCategoryId === null 
+                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet' 
+                : 'text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850/50'
+            }`}
+            title="All Prompts"
+          >
+            <LayoutGrid size={18} className={selectedCategoryId === null ? 'text-cyber-violet' : ''} />
+            {!isCollapsed && <span>All Prompts</span>}
+          </button>
+
+          <button
+            onClick={() => onSelectCategory('favorites')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
+              selectedCategoryId === 'favorites' 
+                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet' 
+                : 'text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850/50'
+            }`}
+            title="Favorites"
+          >
+            <Star size={18} className={selectedCategoryId === 'favorites' ? 'text-yellow-500 fill-yellow-500' : ''} />
+            {!isCollapsed && <span>Favorites</span>}
+          </button>
+
+          <button
+            onClick={() => onSelectCategory('pinned')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
+              selectedCategoryId === 'pinned' 
+                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet' 
+                : 'text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850/50'
+            }`}
+            title="Pinned"
+          >
+            <Pin size={18} className={selectedCategoryId === 'pinned' ? 'text-cyber-cyan fill-cyber-cyan' : ''} />
+            {!isCollapsed && <span>Pinned</span>}
+          </button>
+        </div>
+
+        {/* Categories Section */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between px-3 mb-2">
+            {!isCollapsed && <h3 className="text-[11px] font-bold text-obsidian-400 uppercase tracking-widest">Categories</h3>}
+            {!isCollapsed && (
+              <button 
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="text-obsidian-400 hover:text-cyber-violet cursor-pointer transition-colors duration-150"
+                title="Create Category"
+              >
+                <Plus size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Add Category Form */}
+          {!isCollapsed && showAddForm && (
+            <form onSubmit={handleCreateCategory} className="glass-panel p-3 rounded-lg mb-3 space-y-3 border border-obsidian-800">
+              <input
+                type="text"
+                placeholder="Category Name..."
+                value={newCatName}
+                onChange={e => setNewCatName(e.target.value)}
+                className="w-full bg-obsidian-950 border border-obsidian-800 rounded px-2 py-1 text-xs focus-glow-violet"
+                autoFocus
+              />
+              
+              {/* Presets Grid */}
+              <div className="space-y-1">
+                <span className="text-[9px] text-obsidian-400 uppercase tracking-wider block">Select Icon</span>
+                <div className="grid grid-cols-5 gap-1">
+                  {PRESET_ICONS.map(ic => (
+                    <button
+                      key={ic}
+                      type="button"
+                      onClick={() => setNewCatIcon(ic)}
+                      className={`p-1.5 rounded flex justify-center items-center cursor-pointer transition-all hover:bg-obsidian-800 ${
+                        newCatIcon === ic ? 'bg-cyber-purple/40 border border-cyber-violet' : 'bg-obsidian-900 border border-transparent'
+                      }`}
+                    >
+                      <CategoryIcon name={ic} size={12} className="text-obsidian-300" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Colors Grid */}
+              <div className="space-y-1">
+                <span className="text-[9px] text-obsidian-400 uppercase tracking-wider block">Select Color</span>
+                <div className="flex gap-1.5 flex-wrap">
+                  {PRESET_COLORS.map(col => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => setNewCatColor(col)}
+                      className="w-4 h-4 rounded-full flex justify-center items-center cursor-pointer transition-transform hover:scale-110"
+                      style={{ backgroundColor: col }}
+                    >
+                      {newCatColor === col && <Circle size={6} className="text-white fill-white" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 text-xs pt-1">
+                <button
+                  type="submit"
+                  className="flex-1 bg-gradient-cyber font-semibold text-white px-2 py-1 rounded cursor-pointer"
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="flex-1 bg-obsidian-800 text-obsidian-300 px-2 py-1 rounded cursor-pointer hover:bg-obsidian-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* List of Custom Categories */}
+          <div className="space-y-0.5">
+            {categories.map((cat) => {
+              const isSelected = selectedCategoryId === cat.id;
+              return (
+                <div 
+                  key={cat.id}
+                  className="group flex items-center justify-between rounded-lg transition-all duration-150"
+                >
+                  <button
+                    onClick={() => onSelectCategory(cat.id)}
+                    className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-left transition-all duration-150 cursor-pointer ${
+                      isSelected
+                        ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2'
+                        : 'text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850/50'
+                    }`}
+                    style={isSelected ? { borderLeftColor: cat.color } : undefined}
+                    title={cat.name}
+                  >
+                    <CategoryIcon name={cat.icon} size={18} color={cat.color} />
+                    {!isCollapsed && <span className="truncate">{cat.name}</span>}
+                  </button>
+                  
+                  {/* Delete button (only show on hover, and if not collapsed) */}
+                  {!isCollapsed && (
+                    <button
+                      onClick={() => onDeleteCategory(cat.id)}
+                      className="opacity-0 group-hover:opacity-100 text-obsidian-600 hover:text-cyber-rose p-2 cursor-pointer transition-all duration-150"
+                      title="Delete Category"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Backup & System Operations Footer */}
+      <div className="p-4 border-t border-obsidian-850 space-y-1.5">
+        <button
+          onClick={onImportBackup}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 transition-all duration-150 cursor-pointer"
+          title="Import JSON"
+        >
+          <Upload size={14} className="text-cyber-cyan" />
+          {!isCollapsed && <span>Import Backup</span>}
+        </button>
+
+        <button
+          onClick={onExportBackup}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 transition-all duration-150 cursor-pointer"
+          title="Export JSON"
+        >
+          <Download size={14} className="text-cyber-violet" />
+          {!isCollapsed && <span>Export Database</span>}
+        </button>
+      </div>
+    </aside>
+  );
+};
