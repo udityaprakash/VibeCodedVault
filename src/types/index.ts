@@ -1,4 +1,5 @@
 export interface PromptVersion {
+  id?: string;
   version: number;
   timestamp: number;
   content: string;
@@ -43,8 +44,9 @@ export interface IElectronAPI {
   incrementUsage: (promptId: string) => Promise<DatabaseData>;
   saveCategory: (category: Partial<Category> & { name: string }) => Promise<DatabaseData>;
   deleteCategory: (categoryId: string) => Promise<DatabaseData>;
-  exportBackup: () => Promise<boolean>;
-  importBackup: () => Promise<DatabaseData | false>;
+  setAllData: (data: DatabaseData) => void;
+  exportBackup: (backupPayload: unknown, scope: 'workspace' | 'prompts') => Promise<boolean>;
+  importBackup: () => Promise<unknown | false>;
 }
 
 declare global {

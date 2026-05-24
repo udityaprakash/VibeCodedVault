@@ -4,6 +4,14 @@ import {
   Layers, Pin, Star, Info, Settings, Eye, Edit, Trash2
 } from 'lucide-react';
 import type { Prompt, Category } from '../types';
+import {
+  CUSTOM_MODELS_UPDATED_EVENT,
+  PRESET_MODELS,
+  getCustomModels,
+  normalizeModelName,
+  resolveExistingModelName,
+  saveCustomModels,
+} from '../utils/aiModels';
 
 interface PromptEditorProps {
   prompt: Prompt | null; // Null means create new
@@ -13,7 +21,7 @@ interface PromptEditorProps {
   onDelete?: (promptId: string) => void;
 }
 
-const PRESET_MODELS = ['Claude 3.5 Sonnet', 'GPT-4o / ChatGPT', 'Gemini 1.5 Pro', 'Midjourney v6', 'Stable Diffusion 3', 'Llama 3.1'];
+const CUSTOM_MODEL_VALUE = '__custom__';
 
 export const PromptEditor: React.FC<PromptEditorProps> = ({
   prompt,
@@ -27,7 +35,10 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [model, setModel] = useState('Claude 3.5 Sonnet');
+  const [model, setModel] = useState('General');
+  const [customModels, setCustomModels] = useState<string[]>(() => getCustomModels());
+  const [customModelInput, setCustomModelInput] = useState('');
+  const [showCustomModelInput, setShowCustomModelInput] = useState(false);
   const [tagsInput, setTagsInput] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -42,6 +53,40 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   // AI Polish states
   const [polishing, setPolishing] = useState(false);
 
+  const allModelOptions = [...PRESET_MODELS, ...customModels];
+
+  // Sync with model updates from Settings panel or other components
+  useEffect(() => {
+    const syncModels = () => setCustomModels(getCustomModels());
+    window.addEventListener(CUSTOM_MODELS_UPDATED_EVENT, syncModels as EventListener);
+    window.addEventListener('storage', syncModels);
+    return () => {
+      window.removeEventListener(CUSTOM_MODELS_UPDATED_EVENT, syncModels as EventListener);
+      window.removeEventListener('storage', syncModels);
+    };
+  }, []);
+
+  const addCustomModel = (rawModelName: string) => {
+    const normalized = normalizeModelName(rawModelName);
+    if (!normalized) {
+      return;
+    }
+
+    const existing = resolveExistingModelName(normalized, customModels);
+    if (existing) {
+      setModel(existing);
+      setCustomModelInput('');
+      setShowCustomModelInput(false);
+      return;
+    }
+
+    const nextModels = saveCustomModels([...customModels, normalized]);
+    setCustomModels(nextModels);
+    setModel(normalized);
+    setCustomModelInput('');
+    setShowCustomModelInput(false);
+  };
+
   // Load prompt data on select/change
   useEffect(() => {
     if (prompt) {
@@ -50,6 +95,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setContent(prompt.content);
       setCategoryId(prompt.categoryId);
       setModel(prompt.model);
+      setShowCustomModelInput(false);
+      setCustomModelInput('');
       setTagsInput(prompt.tags ? prompt.tags.join(', ') : '');
       setIsPinned(prompt.isPinned || false);
       setIsFavorite(prompt.isFavorite || false);
@@ -68,7 +115,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setDescription('');
       setContent('');
       setCategoryId(categories.length > 0 ? categories[0].id : null);
-      setModel('Claude 3.5 Sonnet');
+      setModel('General');
+      setShowCustomModelInput(false);
+      setCustomModelInput('');
       setTagsInput('');
       setIsPinned(false);
       setIsFavorite(false);
@@ -76,6 +125,27 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setActiveTab('editor');
     }
   }, [prompt, categories]);
+
+  // Ensure edited prompts with unknown models become available in future dropdown usage
+  useEffect(() => {
+    if (!prompt?.model) {
+      return;
+    }
+
+    const normalized = prompt.model.trim();
+    if (!normalized) {
+      return;
+    }
+
+    const existsInPreset = PRESET_MODELS.some(item => item.toLowerCase() === normalized.toLowerCase());
+    const existsInCustom = customModels.some(item => item.toLowerCase() === normalized.toLowerCase());
+    if (existsInPreset || existsInCustom) {
+      return;
+    }
+
+    const nextModels = saveCustomModels([...customModels, normalized]);
+    setCustomModels(nextModels);
+  }, [customModels, prompt?.model]);
 
   // Extract variables in double braces {{variable}}
   const extractPlaceholders = (text: string): string[] => {
@@ -192,7 +262,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       content: content.trim(),
       tags,
       categoryId,
-      model,
+      model: model.trim() || 'General',
       isPinned,
       isFavorite
     });
@@ -354,15 +424,49 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">AI Model Compatibility</label>
                   <select
                     value={model}
-                    onChange={e => setModel(e.target.value)}
+                    onChange={e => {
+                      if (e.target.value === CUSTOM_MODEL_VALUE) {
+                        setShowCustomModelInput(true);
+                        return;
+                      }
+                      setModel(e.target.value);
+                      setShowCustomModelInput(false);
+                    }}
                     className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300 font-semibold cursor-pointer"
                   >
-                    {PRESET_MODELS.map(m => (
+                    {allModelOptions.map(m => (
                       <option key={m} value={m}>
                         {m}
                       </option>
                     ))}
+                    <option value={CUSTOM_MODEL_VALUE}>+ Custom model...</option>
                   </select>
+
+                  {showCustomModelInput && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Enter custom model name"
+                        value={customModelInput}
+                        onChange={e => setCustomModelInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addCustomModel(customModelInput);
+                          }
+                        }}
+                        className="flex-1 bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addCustomModel(customModelInput)}
+                        className="px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-cyber-violet/15 border border-cyber-violet/40 text-cyber-violet hover:bg-cyber-violet/25 transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

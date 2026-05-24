@@ -1,6 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+:root {
+  --theme-accent: #8B5CF6;
+  --theme-accent-deep: #6034cc;
+  --theme-accent-rgb: 139, 92, 246;
+  --glass-panel-bg: rgba(14, 17, 24, 0.72);
+  --glass-card-bg: rgba(24, 28, 42, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-card-border: rgba(255, 255, 255, 0.05);
+  --glass-card-hover-border: rgba(var(--theme-accent-rgb), 0.35);
+  --glass-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
 @theme {
   --color-obsidian-950: #060709;
   --color-obsidian-900: #0B0C10;
@@ -12,35 +24,76 @@
   --color-obsidian-300: #C3CAD6;
   --color-obsidian-100: #F8FAFC;
 
-  --color-cyber-purple: #6D28D9;
-  --color-cyber-violet: #8B5CF6;
+  --color-cyber-purple: var(--theme-accent-deep);
+  --color-cyber-violet: var(--theme-accent);
   --color-cyber-cyan: #06B6D4;
   --color-cyber-emerald: #10B981;
   --color-cyber-rose: #F43F5E;
 
   --font-sans: 'Outfit', 'Inter', system-ui, sans-serif;
 
-  --shadow-glow-violet: 0 0 15px rgba(139, 92, 246, 0.15);
+  --shadow-glow-violet: 0 0 15px rgba(var(--theme-accent-rgb), 0.2);
   --shadow-glow-cyan: 0 0 15px rgba(6, 182, 212, 0.15);
   --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 
-  --background-image-gradient-cyber: linear-gradient(135deg, #8B5CF6 0%, #06B6D4 100%);
+  --background-image-gradient-cyber: linear-gradient(135deg, var(--theme-accent) 0%, #06B6D4 100%);
   --background-image-gradient-glass: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
 }
 
+html[data-theme='light'] {
+  --color-obsidian-950: #f6f8fb;
+  --color-obsidian-900: #eef2f7;
+  --color-obsidian-850: #e4e9f1;
+  --color-obsidian-800: #d6deea;
+  --color-obsidian-700: #b4c0d2;
+  --color-obsidian-600: #74839a;
+  --color-obsidian-400: #4d5b72;
+  --color-obsidian-300: #354257;
+  --color-obsidian-100: #0b1424;
+  --glass-panel-bg: rgba(235, 241, 250, 0.86);
+  --glass-card-bg: rgba(252, 254, 255, 0.94);
+  --glass-border: rgba(64, 83, 109, 0.18);
+  --glass-card-border: rgba(64, 83, 109, 0.2);
+  --glass-card-hover-border: rgba(var(--theme-accent-rgb), 0.45);
+  --glass-shadow: 0 14px 28px rgba(20, 33, 55, 0.12);
+}
+
+html[data-theme='dark'] {
+  --color-obsidian-950: #060709;
+  --color-obsidian-900: #0B0C10;
+  --color-obsidian-850: #12141C;
+  --color-obsidian-800: #1B1E2E;
+  --color-obsidian-700: #2C314D;
+  --color-obsidian-600: #474F7A;
+  --color-obsidian-400: #8F9BB4;
+  --color-obsidian-300: #C3CAD6;
+  --color-obsidian-100: #F8FAFC;
+  --glass-panel-bg: rgba(14, 17, 24, 0.72);
+  --glass-card-bg: rgba(24, 28, 42, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-card-border: rgba(255, 255, 255, 0.05);
+  --glass-card-hover-border: rgba(var(--theme-accent-rgb), 0.35);
+  --glass-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
 @utility glass-panel {
-  background: rgba(18, 20, 28, 0.45);
+  background: var(--glass-panel-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
 }
 
 @utility glass-card {
-  background: rgba(27, 30, 46, 0.3);
+  background: var(--glass-card-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-card-border);
+  box-shadow: var(--glass-shadow);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: var(--glass-card-hover-border);
 }
 
 @utility focus-glow-violet {
@@ -73,6 +126,7 @@ body {
   width: 100vw;
   overflow: hidden;
   user-select: none;
+  transition: background-color 240ms ease, color 240ms ease;
 }
 
 /* Custom Scrollbar */

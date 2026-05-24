@@ -13,8 +13,9 @@ contextBridge.exposeInMainWorld('api', {
   incrementUsage: (promptId) => ipcRenderer.invoke('db-increment-usage', promptId),
   saveCategory: (category) => ipcRenderer.invoke('db-save-category', category),
   deleteCategory: (categoryId) => ipcRenderer.invoke('db-delete-category', categoryId),
+  setAllData: (data) => ipcRenderer.send('db-set-all', data),
   
   // Backup / Import API
-  exportBackup: () => ipcRenderer.invoke('db-export-backup'),
+  exportBackup: (backupPayload, scope) => ipcRenderer.invoke('db-export-backup', backupPayload, scope),
   importBackup: () => ipcRenderer.invoke('db-import-backup'),
 });

@@ -8,6 +8,273 @@ import type { Category, Prompt, DatabaseData } from './types';
 import { 
   Search, Terminal, Plus, Zap, Bookmark, AlertTriangle, Layers
 } from 'lucide-react';
+import { PRESET_MODELS, getCustomModels, saveCustomModels } from './utils/aiModels';
+
+type ThemeMode = 'light' | 'dark';
+
+const THEME_STORAGE_KEY = 'promptvault-theme-preferences';
+
+type BackupScope = 'workspace' | 'prompts';
+
+interface WorkspaceBackupPayload {
+  kind: 'promptvault-backup';
+  version: 2;
+  scope: 'workspace';
+  exportedAt: number;
+  data: {
+    categories: Category[];
+    prompts: Prompt[];
+    settings: {
+      themeMode: ThemeMode;
+      accentColor: string;
+      customModels: string[];
+    };
+  };
+}
+
+interface PromptsBackupPayload {
+  kind: 'promptvault-backup';
+  version: 2;
+  scope: 'prompts';
+  exportedAt: number;
+  data: {
+    prompts: Prompt[];
+  };
+}
+
+type BackupPayload = WorkspaceBackupPayload | PromptsBackupPayload;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const normalizeHex = (hex: string): string => {
+  const cleaned = hex.trim().replace('#', '');
+  if (cleaned.length === 3) {
+    return `#${cleaned
+      .split('')
+      .map(char => char + char)
+      .join('')
+      .toUpperCase()}`;
+  }
+  if (cleaned.length === 6) {
+    return `#${cleaned.toUpperCase()}`;
+  }
+  return '#8B5CF6';
+};
+
+const hexToRgb = (hex: string) => {
+  const normalized = normalizeHex(hex);
+  const value = normalized.replace('#', '');
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  };
+};
+
+const adjustHex = (hex: string, amount: number) => {
+  const { r, g, b } = hexToRgb(hex);
+  const toHex = (channel: number) => clamp(channel + amount, 0, 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+};
+
+const isPromptArray = (value: unknown): value is Prompt[] =>
+  Array.isArray(value);
+
+const isCategoryArray = (value: unknown): value is Category[] =>
+  Array.isArray(value);
+
+const getVersionKey = (version: Prompt['versions'][number]) =>
+  version.id || `${version.version}:${version.timestamp}:${version.content}`;
+
+const comparePromptVersions = (
+  left: Prompt['versions'][number] | undefined,
+  right: Prompt['versions'][number] | undefined
+) => {
+  if (!left && !right) return 0;
+  if (!left) return -1;
+  if (!right) return 1;
+  if (left.version !== right.version) {
+    return left.version - right.version;
+  }
+  return left.timestamp - right.timestamp;
+};
+
+const normalizePromptVersions = (prompt: Prompt): Prompt['versions'] => {
+  const versions = Array.isArray(prompt.versions) ? prompt.versions : [];
+  const seen = new Set<string>();
+
+  return versions
+    .map(version => ({
+      ...version,
+      id: version.id || `${prompt.id}-v${version.version}-${version.timestamp}`,
+    }))
+    .filter(version => {
+      const key = getVersionKey(version);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+};
+
+const mergePromptHistory = (existing: Prompt | undefined, incoming: Prompt): Prompt | null => {
+  const normalizedIncoming = {
+    ...incoming,
+    versions: normalizePromptVersions(incoming),
+  };
+
+  if (!existing) {
+    return normalizedIncoming;
+  }
+
+  const normalizedExisting = {
+    ...existing,
+    versions: normalizePromptVersions(existing),
+  };
+
+  const existingLatest = normalizedExisting.versions[normalizedExisting.versions.length - 1];
+  const incomingLatest = normalizedIncoming.versions[normalizedIncoming.versions.length - 1];
+  const incomingIsNewer = comparePromptVersions(incomingLatest, existingLatest) > 0;
+
+  if (existingLatest && incomingLatest && getVersionKey(existingLatest) === getVersionKey(incomingLatest)) {
+    return null;
+  }
+
+  const mergedVersions = [...normalizedExisting.versions];
+  const existingVersionKeys = new Set(mergedVersions.map(getVersionKey));
+
+  normalizedIncoming.versions.forEach(version => {
+    const key = getVersionKey(version);
+    if (!existingVersionKeys.has(key)) {
+      existingVersionKeys.add(key);
+      mergedVersions.push(version);
+    }
+  });
+
+  mergedVersions.sort((left, right) => {
+    if (left.version !== right.version) {
+      return left.version - right.version;
+    }
+    return left.timestamp - right.timestamp;
+  });
+
+  const latestVersion = mergedVersions[mergedVersions.length - 1];
+  const activeSource = incomingIsNewer ? normalizedIncoming : normalizedExisting;
+
+  return {
+    ...activeSource,
+    versions: mergedVersions,
+    version: latestVersion?.version ?? normalizedIncoming.version,
+    content: latestVersion?.content ?? normalizedIncoming.content,
+    updatedAt: Math.max(normalizedExisting.updatedAt, normalizedIncoming.updatedAt),
+    createdAt: Math.min(normalizedExisting.createdAt, normalizedIncoming.createdAt),
+    usageCount: Math.max(normalizedExisting.usageCount || 0, normalizedIncoming.usageCount || 0),
+  };
+};
+
+const mergePromptsByIdAndVersion = (base: Prompt[], incoming: Prompt[]) => {
+  const merged = [...base];
+  const byId = new Map(base.map(prompt => [prompt.id, prompt]));
+
+  incoming.forEach(prompt => {
+    const mergedPrompt = mergePromptHistory(byId.get(prompt.id), prompt);
+    if (mergedPrompt === null) {
+      return;
+    }
+
+    if (byId.has(prompt.id)) {
+      const index = merged.findIndex(item => item.id === prompt.id);
+      if (index !== -1) {
+        merged[index] = mergedPrompt;
+      }
+    } else {
+      merged.push(mergedPrompt);
+    }
+
+    byId.set(prompt.id, mergedPrompt);
+  });
+
+  return merged;
+};
+
+const createPromptVersion = (promptId: string, version: number, timestamp: number, content: string) => ({
+  id: `${promptId}-v${version}-${timestamp}`,
+  version,
+  timestamp,
+  content,
+});
+
+const mergeCategoriesWithoutOverwriting = (base: Category[], incoming: Category[]) => {
+  const existingIds = new Set(base.map(item => item.id));
+  const normalizedIncoming = incoming.map(item => {
+    if (!existingIds.has(item.id)) {
+      existingIds.add(item.id);
+      return item;
+    }
+
+    return item;
+  });
+
+  return [...base, ...normalizedIncoming.filter(item => !base.some(existing => existing.id === item.id))];
+};
+
+const parseBackupPayload = (raw: unknown): { scope: BackupScope; prompts: Prompt[]; categories?: Category[]; settings?: WorkspaceBackupPayload['data']['settings'] } | null => {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const backup = raw as Record<string, unknown>;
+
+  if (backup.kind === 'promptvault-backup' && backup.version === 2 && backup.scope === 'workspace') {
+    const data = backup.data as Record<string, unknown> | undefined;
+    if (!data || !isPromptArray(data.prompts) || !isCategoryArray(data.categories)) {
+      return null;
+    }
+
+    const settings = (data.settings && typeof data.settings === 'object')
+      ? data.settings as WorkspaceBackupPayload['data']['settings']
+      : undefined;
+
+    return {
+      scope: 'workspace',
+      prompts: data.prompts,
+      categories: data.categories,
+      settings,
+    };
+  }
+
+  if (backup.kind === 'promptvault-backup' && backup.version === 2 && backup.scope === 'prompts') {
+    const data = backup.data as Record<string, unknown> | undefined;
+    if (!data || !isPromptArray(data.prompts)) {
+      return null;
+    }
+
+    return {
+      scope: 'prompts',
+      prompts: data.prompts,
+    };
+  }
+
+  // Legacy format compatibility: treat as workspace backup
+  if (isPromptArray(backup.prompts) && isCategoryArray(backup.categories)) {
+    return {
+      scope: 'workspace',
+      prompts: backup.prompts,
+      categories: backup.categories,
+    };
+  }
+
+  // Legacy prompt-only format compatibility
+  if (isPromptArray(backup.prompts)) {
+    return {
+      scope: 'prompts',
+      prompts: backup.prompts,
+    };
+  }
+
+  return null;
+};
 
 // Robust local fallback seed data for browser/quick testing
 const FALLBACK_SEED: DatabaseData = {
@@ -74,10 +341,52 @@ function App() {
   // Status Alerts notifications
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
+  // Global visual theme state
+  const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
+  const [accentColor, setAccentColor] = useState('#8B5CF6');
+  const [isThemeSettingsOpen, setIsThemeSettingsOpen] = useState(false);
+
   // Load database on start
   useEffect(() => {
     loadDatabase();
   }, []);
+
+  // Restore saved user theme preferences
+  useEffect(() => {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (!stored) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as { mode?: ThemeMode; accent?: string };
+      if (parsed.mode === 'light' || parsed.mode === 'dark') {
+        setThemeMode(parsed.mode);
+      }
+      if (typeof parsed.accent === 'string') {
+        setAccentColor(normalizeHex(parsed.accent));
+      }
+    } catch {
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    }
+  }, []);
+
+  // Apply CSS variables + persist any preference updates
+  useEffect(() => {
+    const root = document.documentElement;
+    const normalizedAccent = normalizeHex(accentColor);
+    const { r, g, b } = hexToRgb(normalizedAccent);
+
+    root.setAttribute('data-theme', themeMode);
+    root.style.setProperty('--theme-accent', normalizedAccent);
+    root.style.setProperty('--theme-accent-deep', adjustHex(normalizedAccent, -42));
+    root.style.setProperty('--theme-accent-rgb', `${r}, ${g}, ${b}`);
+
+    localStorage.setItem(
+      THEME_STORAGE_KEY,
+      JSON.stringify({ mode: themeMode, accent: normalizedAccent })
+    );
+  }, [accentColor, themeMode]);
 
   // Keyboard listener setups
   useEffect(() => {
@@ -146,13 +455,15 @@ function App() {
         if (promptData.id) {
           setPrompts(prev => prev.map(p => p.id === promptData.id ? { ...p, ...promptData, updatedAt: Date.now(), version: p.version + 1 } as Prompt : p));
         } else {
+          const newPromptId = 'mock_' + Math.random().toString(36).substr(2, 9);
+          const createdAt = Date.now();
           const newPrompt: Prompt = {
             ...promptData,
-            id: 'mock_' + Math.random().toString(36).substr(2, 9),
+            id: newPromptId,
             version: 1,
-            versions: [{ version: 1, timestamp: Date.now(), content: promptData.content }],
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
+            versions: [createPromptVersion(newPromptId, 1, createdAt, promptData.content)],
+            createdAt,
+            updatedAt: createdAt,
             usageCount: 0,
             isPinned: promptData.isPinned || false,
             isFavorite: promptData.isFavorite || false
@@ -249,21 +560,69 @@ function App() {
 
   const handleExportBackup = async () => {
     try {
+      const selectedScope: BackupScope = confirm(
+        'Export entire workspace?\n\nOK = Entire Workspace (prompts, categories, theme, AI models)\nCancel = Prompts only'
+      )
+        ? 'workspace'
+        : 'prompts';
+
+      const normalizedAccent = normalizeHex(accentColor);
+      const payload: BackupPayload =
+        selectedScope === 'workspace'
+          ? {
+              kind: 'promptvault-backup',
+              version: 2,
+              scope: 'workspace',
+              exportedAt: Date.now(),
+              data: {
+                categories,
+                prompts,
+                settings: {
+                  themeMode,
+                  accentColor: normalizedAccent,
+                  customModels: getCustomModels(),
+                },
+              },
+            }
+          : {
+              kind: 'promptvault-backup',
+              version: 2,
+              scope: 'prompts',
+              exportedAt: Date.now(),
+              data: {
+                prompts,
+              },
+            };
+
       if (window.api && window.api.exportBackup) {
-        const success = await window.api.exportBackup();
+        const success = await window.api.exportBackup(payload, selectedScope);
         if (success) {
-          triggerNotification('PromptVault database exported successfully.');
+          triggerNotification(
+            selectedScope === 'workspace'
+              ? 'Workspace backup exported successfully.'
+              : 'Prompts backup exported successfully.'
+          );
         }
       } else {
         // Fallback file download for web browser previews
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ categories, prompts }));
+        const dataStr =
+          'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
         const downloadAnchor = document.createElement('a');
         downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", "promptvault_backup_web.json");
+        downloadAnchor.setAttribute(
+          'download',
+          selectedScope === 'workspace'
+            ? 'promptvault_workspace_backup_web.json'
+            : 'promptvault_prompts_backup_web.json'
+        );
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         downloadAnchor.remove();
-        triggerNotification('Browser backup JSON file downloaded.');
+        triggerNotification(
+          selectedScope === 'workspace'
+            ? 'Workspace backup downloaded.'
+            : 'Prompts backup downloaded.'
+        );
       }
     } catch (e) {
       console.error('Export failed:', e);
@@ -271,14 +630,80 @@ function App() {
     }
   };
 
+  const persistDatabase = async (nextData: DatabaseData) => {
+    if (window.api && window.api.setAllData) {
+      try {
+        window.api.setAllData(nextData);
+      } catch (error) {
+        console.warn('setAllData handler unavailable, falling back to in-memory update:', error);
+      }
+    }
+
+    setPrompts(nextData.prompts);
+    setCategories(nextData.categories);
+  };
+
+  const syncModelsFromPrompts = (importedPrompts: Prompt[], explicitCustomModels?: string[]) => {
+    const modelNames = importedPrompts
+      .map(item => item.model?.trim())
+      .filter((item): item is string => Boolean(item));
+
+    const promptCustomModels = modelNames.filter(
+      modelName => !PRESET_MODELS.some(preset => preset.toLowerCase() === modelName.toLowerCase())
+    );
+
+    const requestedCustomModels = (explicitCustomModels || [])
+      .map(model => model.trim())
+      .filter(model => model.length > 0);
+
+    const existing = getCustomModels();
+    const merged = Array.from(new Set([...existing, ...promptCustomModels, ...requestedCustomModels]));
+    saveCustomModels(merged);
+  };
+
+  const applyParsedImport = async (parsed: { scope: BackupScope; prompts: Prompt[]; categories?: Category[]; settings?: WorkspaceBackupPayload['data']['settings'] }) => {
+    if (parsed.scope === 'workspace') {
+      const applyWorkspace = confirm(
+        'Detected a WORKSPACE backup.\n\nOK = Add workspace prompts/categories and apply theme + AI model settings\nCancel = Import prompts only'
+      );
+
+      if (applyWorkspace) {
+        const nextPrompts = mergePromptsByIdAndVersion(prompts, parsed.prompts);
+        const nextCategories = parsed.categories ? mergeCategoriesWithoutOverwriting(categories, parsed.categories) : categories;
+        await persistDatabase({ prompts: nextPrompts, categories: nextCategories });
+
+        if (parsed.settings) {
+          if (parsed.settings.themeMode === 'light' || parsed.settings.themeMode === 'dark') {
+            setThemeMode(parsed.settings.themeMode);
+          }
+          if (typeof parsed.settings.accentColor === 'string') {
+            setAccentColor(normalizeHex(parsed.settings.accentColor));
+          }
+        }
+
+        syncModelsFromPrompts(parsed.prompts, parsed.settings?.customModels);
+        triggerNotification('Workspace backup imported and settings applied.');
+        return;
+      }
+    }
+
+    const mergedPrompts = mergePromptsByIdAndVersion(prompts, parsed.prompts);
+    await persistDatabase({ prompts: mergedPrompts, categories });
+    syncModelsFromPrompts(parsed.prompts);
+    triggerNotification('Prompts imported successfully.');
+  };
+
   const handleImportBackup = async () => {
     try {
       if (window.api && window.api.importBackup) {
-        const data = await window.api.importBackup();
-        if (data) {
-          setPrompts(data.prompts);
-          setCategories(data.categories);
-          triggerNotification('PromptVault database imported successfully.');
+        const importedRaw = await window.api.importBackup();
+        if (importedRaw) {
+          const parsed = parseBackupPayload(importedRaw);
+          if (!parsed) {
+            triggerNotification('Invalid backup format.', 'error');
+            return;
+          }
+          await applyParsedImport(parsed);
         } else {
           triggerNotification('Import cancelled or failed.', 'info');
         }
@@ -291,16 +716,15 @@ function App() {
           const file = (e.target as HTMLInputElement).files?.[0];
           if (!file) return;
           const reader = new FileReader();
-          reader.onload = event => {
+          reader.onload = async event => {
             try {
               const importedData = JSON.parse(event.target?.result as string);
-              if (importedData.categories && importedData.prompts) {
-                setCategories(importedData.categories);
-                setPrompts(importedData.prompts);
-                triggerNotification('Web backup imported successfully!');
-              } else {
+              const parsed = parseBackupPayload(importedData);
+              if (!parsed) {
                 triggerNotification('Invalid JSON backup format.', 'error');
+                return;
               }
+              await applyParsedImport(parsed);
             } catch (err) {
               triggerNotification('Failed to parse JSON file.', 'error');
             }
@@ -352,6 +776,14 @@ function App() {
 
   const filteredPrompts = getFilteredPrompts();
 
+  const handleToggleTheme = () => {
+    setThemeMode(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  const handleAccentColorChange = (newColor: string) => {
+    setAccentColor(normalizeHex(newColor));
+  };
+
   // Model statistics calculation
   const totalPrompts = prompts.length;
   const favoriteCount = prompts.filter(p => p.isFavorite).length;
@@ -360,7 +792,15 @@ function App() {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-obsidian-950">
       {/* Title Bar */}
-      <TitleBar />
+      <TitleBar
+        themeMode={themeMode}
+        accentColor={accentColor}
+        settingsOpen={isThemeSettingsOpen}
+        onToggleTheme={handleToggleTheme}
+        onToggleSettings={() => setIsThemeSettingsOpen(prev => !prev)}
+        onCloseSettings={() => setIsThemeSettingsOpen(false)}
+        onAccentColorChange={handleAccentColorChange}
+      />
 
       {/* Main App Window Layout */}
       <div className="flex-1 flex overflow-hidden relative">

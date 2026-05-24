@@ -203,6 +203,7 @@ ipcMain.handle('db-save-prompt', (event, prompt) => {
     if (prevContent !== prompt.content) {
       newVersion += 1;
       updatedVersions.push({
+        id: `${prompt.id || existing.id}-v${newVersion}-${now}`,
         version: newVersion,
         timestamp: now,
         content: prompt.content
@@ -222,7 +223,7 @@ ipcMain.handle('db-save-prompt', (event, prompt) => {
       id: prompt.id || 'p_' + Math.random().toString(36).substr(2, 9),
       version: 1,
       versions: [
-        { version: 1, timestamp: now, content: prompt.content }
+        { id: `${prompt.id || 'p'}-v1-${now}`, version: 1, timestamp: now, content: prompt.content }
       ],
       createdAt: now,
       updatedAt: now,
@@ -285,23 +286,39 @@ ipcMain.handle('db-delete-category', (event, categoryId) => {
   return readDatabase();
 });
 
+ipcMain.on('db-set-all', (event, data) => {
+  if (!data || !Array.isArray(data.categories) || !Array.isArray(data.prompts)) {
+    return;
+  }
+
+  writeDatabase({
+    categories: data.categories,
+    prompts: data.prompts,
+  });
+});
+
 // ==========================================
 // IPC HANDLERS - EXPORT / IMPORT BACKUPS
 // ==========================================
-ipcMain.handle('db-export-backup', async () => {
+ipcMain.handle('db-export-backup', async (event, backupPayload, scope = 'workspace') => {
   if (!mainWindow) return false;
+
+  const defaultFileName =
+    scope === 'prompts' ? 'promptvault_prompts_backup.json' : 'promptvault_workspace_backup.json';
   
   const { filePath } = await dialog.showSaveDialog(mainWindow, {
     title: 'Export PromptVault Backup',
-    defaultPath: path.join(app.getPath('downloads'), 'promptvault_backup.json'),
+    defaultPath: path.join(app.getPath('downloads'), defaultFileName),
     filters: [{ name: 'JSON Files', extensions: ['json'] }]
   });
   
   if (!filePath) return false;
   
   try {
-    const db = readDatabase();
-    fs.writeFileSync(filePath, JSON.stringify(db, null, 2), 'utf-8');
+    if (!backupPayload) {
+      return false;
+    }
+    fs.writeFileSync(filePath, JSON.stringify(backupPayload, null, 2), 'utf-8');
     return true;
   } catch (e) {
     console.error('Export failed:', e);
@@ -323,14 +340,8 @@ ipcMain.handle('db-import-backup', async () => {
   try {
     const backupStr = fs.readFileSync(filePaths[0], 'utf-8');
     const backupData = JSON.parse(backupStr);
-    
-    if (backupData.categories && backupData.prompts) {
-      writeDatabase(backupData);
-      return backupData;
-    } else {
-      console.error('Invalid backup file format');
-      return false;
-    }
+
+    return backupData;
   } catch (e) {
     console.error('Import failed:', e);
     return false;

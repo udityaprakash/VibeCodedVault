@@ -25,6 +25,29 @@ PromptVault solves this problem by turning prompts into structured, searchable, 
 
 ---
 
+# Recent Features Added
+
+These updates were added to the current PromptVault workspace:
+
+- animated light/dark theme toggle in the title bar
+- custom accent color picker via the settings panel
+- light-mode and dark-mode theme persistence with local storage
+- theme-aware sidebar, prompt cards, and editor surfaces
+- AI model selector with `General` as the default option
+- custom AI model creation from the editor dropdown
+- AI model management inside settings with add and delete controls
+- custom AI model persistence across app restarts
+- workspace backup export with scope selection:
+	- entire workspace
+	- prompts only
+- workspace backup import that restores theme settings, accent color, and custom AI models when present
+- prompts-only import that merges into the existing workspace instead of replacing it
+- prompt deduplication by prompt id during import
+- prompt version merge behavior so matching ids keep history instead of duplicating prompt entries
+- stable ids for prompt version history entries
+
+---
+
 # Vision
 
 The vision of PromptVault is to create:
