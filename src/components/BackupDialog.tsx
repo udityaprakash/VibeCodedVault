@@ -28,13 +28,13 @@ const rows: Array<{
   {
     key: 'prompts',
     label: 'Prompts',
-    description: 'Includes prompts and categories. Prompt models are preserved from the imported data.',
+    description: 'Includes prompts and categories. Prompt compatibility tags are preserved from the imported data.',
     icon: Layers,
   },
   {
     key: 'theme',
     label: 'Theme',
-    description: 'Includes theme mode, accent color, and custom AI models.',
+    description: 'Includes theme mode, accent color, and custom compatibility tags.',
     icon: Palette,
   },
 ];
@@ -81,7 +81,7 @@ export const BackupDialog: FC<BackupDialogProps> = ({
     mode === 'export'
       ? 'Select the content you want to include in the backup file.'
       : available.theme && !available.prompts
-        ? 'This file contains only theme settings and custom models.'
+        ? 'This file contains only theme settings and custom compatibility tags.'
         : available.prompts && !available.theme
           ? 'This file contains only prompts and categories.'
           : 'Select which sections should be applied from this backup file.';

@@ -226,7 +226,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               >
                 <span className="flex items-center gap-1.5 font-semibold">
                   <Tag size={12} className="text-cyber-cyan" />
-                  AI Models
+                  Compatibility
                 </span>
                 <span className="text-[10px] text-obsidian-500">{PRESET_MODELS.length + customModels.length}</span>
               </button>
@@ -234,7 +234,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
             {isModelManagerOpen && (
               <div className="absolute top-[44px] right-[252px] w-72 rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md p-3 shadow-2xl z-[110]">
-                <div className="text-[10px] uppercase tracking-widest text-obsidian-500 mb-2">AI Models</div>
+                <div className="text-[10px] uppercase tracking-widest text-obsidian-500 mb-2">Compatibility</div>
 
                 <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
                   {PRESET_MODELS.map(modelName => (
@@ -248,7 +248,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                   ))}
 
                   {customModels.length === 0 && (
-                    <div className="text-[11px] text-obsidian-500 px-1 py-2">No custom models added yet.</div>
+                    <div className="text-[11px] text-obsidian-500 px-1 py-2">No custom compatibility tags added yet.</div>
                   )}
 
                   {customModels.map(modelName => (
@@ -260,7 +260,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                       <button
                         onClick={() => handleRemoveCustomModel(modelName)}
                         className="p-1 rounded-md text-obsidian-500 hover:text-cyber-rose hover:bg-cyber-rose/10 transition-colors"
-                        title="Delete model"
+                        title="Delete compatibility tag"
                         aria-label={`Delete ${modelName}`}
                       >
                         <Trash2 size={12} />
@@ -280,7 +280,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                         handleAddCustomModel();
                       }
                     }}
-                    placeholder="Add custom model"
+                    placeholder="Add custom compatibility tag"
                     className="flex-1 bg-obsidian-900 border border-obsidian-800 rounded-lg px-2.5 py-2 text-[11px] text-obsidian-300 focus-glow-violet"
                   />
                   <button

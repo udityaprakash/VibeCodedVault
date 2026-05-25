@@ -88,6 +88,79 @@ const adjustHex = (hex: string, amount: number) => {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 };
 
+const normalizeForSearch = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const buildBigrams = (value: string) => {
+  const source = ` ${value} `;
+  const bigrams: string[] = [];
+  for (let index = 0; index < source.length - 1; index += 1) {
+    bigrams.push(source.slice(index, index + 2));
+  }
+  return bigrams;
+};
+
+const getBigramSimilarity = (left: string, right: string) => {
+  if (!left || !right) {
+    return 0;
+  }
+
+  if (left === right) {
+    return 1;
+  }
+
+  const leftBigrams = buildBigrams(left);
+  const rightBigrams = buildBigrams(right);
+  if (!leftBigrams.length || !rightBigrams.length) {
+    return 0;
+  }
+
+  const rightCounts = new Map<string, number>();
+  rightBigrams.forEach(bigram => {
+    rightCounts.set(bigram, (rightCounts.get(bigram) || 0) + 1);
+  });
+
+  let intersection = 0;
+  leftBigrams.forEach(bigram => {
+    const count = rightCounts.get(bigram) || 0;
+    if (count > 0) {
+      intersection += 1;
+      rightCounts.set(bigram, count - 1);
+    }
+  });
+
+  return (2 * intersection) / (leftBigrams.length + rightBigrams.length);
+};
+
+const isCategoryNameMatch = (categoryName: string, query: string) => {
+  const normalizedCategory = normalizeForSearch(categoryName);
+  if (!normalizedCategory || !query) {
+    return false;
+  }
+
+  if (normalizedCategory.includes(query) || query.includes(normalizedCategory)) {
+    return true;
+  }
+
+  const queryTokens = query.split(' ').filter(token => token.length > 1);
+  const categoryTokens = normalizedCategory.split(' ').filter(token => token.length > 1);
+  const hasTokenMatch = queryTokens.some(queryToken =>
+    categoryTokens.some(categoryToken =>
+      categoryToken.includes(queryToken) || queryToken.includes(categoryToken)
+    )
+  );
+
+  if (hasTokenMatch) {
+    return true;
+  }
+
+  return getBigramSimilarity(normalizedCategory, query) >= 0.8;
+};
+
 const isPromptArray = (value: unknown): value is Prompt[] => Array.isArray(value);
 
 const isCategoryArray = (value: unknown): value is Category[] => Array.isArray(value);
@@ -986,12 +1059,16 @@ function App() {
     // 2. Filter by Search Query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
+      const normalizedQuery = normalizeForSearch(searchQuery);
+      const categoryNameById = new Map(categories.map(category => [category.id, category.name]));
+
       result = result.filter(p => 
         p.title.toLowerCase().includes(q) ||
         (p.description && p.description.toLowerCase().includes(q)) ||
         p.content.toLowerCase().includes(q) ||
         p.tags.some(tag => tag.toLowerCase().includes(q)) ||
-        p.model.toLowerCase().includes(q)
+        p.model.toLowerCase().includes(q) ||
+        (p.categoryId !== null && isCategoryNameMatch(categoryNameById.get(p.categoryId) || '', normalizedQuery))
       );
     }
 

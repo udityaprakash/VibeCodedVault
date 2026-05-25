@@ -405,7 +405,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 />
               </div>
 
-              {/* Row 3: Category & Model */}
+              {/* Row 3: Category & Compatibility */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">Category</label>
@@ -424,7 +424,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">AI Model Compatibility</label>
+                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">Compatibility</label>
                   <select
                     value={model}
                     onChange={e => {
@@ -442,14 +442,14 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                         {m}
                       </option>
                     ))}
-                    <option value={CUSTOM_MODEL_VALUE}>+ Custom model...</option>
+                    <option value={CUSTOM_MODEL_VALUE}>+ Custom compatibility tag...</option>
                   </select>
 
                   {showCustomModelInput && (
                     <div className="mt-2 flex items-center gap-2">
                       <input
                         type="text"
-                        placeholder="Enter custom model name"
+                        placeholder="Enter custom compatibility tag"
                         value={customModelInput}
                         onChange={e => setCustomModelInput(e.target.value)}
                         onKeyDown={e => {
