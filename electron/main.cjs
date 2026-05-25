@@ -378,6 +378,10 @@ ipcMain.handle('db-get-all', () => {
   return readDatabase();
 });
 
+ipcMain.handle('app-get-version', () => {
+  return app.getVersion();
+});
+
 ipcMain.handle('db-save-prompt', (event, prompt) => {
   const db = readDatabase();
   const index = db.prompts.findIndex(p => p.id === prompt.id);
@@ -639,7 +643,7 @@ ipcMain.handle('app-install-update', async () => {
     }
 
     // This will quit and install the downloaded update
-    autoUpdater.quitAndInstall();
+    autoUpdater.quitAndInstall(false, true);
     return { success: true };
   } catch (err) {
     log.error && log.error('install update failed:', err);

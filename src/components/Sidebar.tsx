@@ -8,6 +8,7 @@ import type { Category } from '../types';
 import { CategoryIcon } from './CategoryIcon';
 
 interface SidebarProps {
+  appVersion: string;
   categories: Category[];
   selectedCategoryId: string | null; // 'all', 'favorites', 'pinned', or a category UUID
   onSelectCategory: (id: string | null) => void;
@@ -21,6 +22,7 @@ const PRESET_ICONS = ['Code', 'Image', 'Megaphone', 'PenTool', 'Zap', 'Target', 
 const PRESET_COLORS = ['#8B5CF6', '#06B6D4', '#10B981', '#F43F5E', '#F59E0B', '#EC4899', '#3B82F6', '#6366F1'];
 
 export const Sidebar: React.FC<SidebarProps> = ({
+  appVersion,
   categories,
   selectedCategoryId,
   onSelectCategory,
@@ -69,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {!isCollapsed && (
           <div className="flex flex-col">
             <span className="font-extrabold tracking-wider bg-gradient-cyber bg-clip-text text-transparent text-lg">PROMPTVAULT</span>
-            <span className="text-[10px] text-obsidian-400 font-medium uppercase tracking-widest mt-[-2px]">Local OS v1.0</span>
+            <span className="text-[10px] text-obsidian-400 font-medium uppercase tracking-widest mt-[-2px]">Local OS {appVersion}</span>
           </div>
         )}
       </div>

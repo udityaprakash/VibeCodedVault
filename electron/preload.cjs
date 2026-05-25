@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Database API
   getAllData: () => ipcRenderer.invoke('db-get-all'),
+  getAppVersion: () => ipcRenderer.invoke('app-get-version'),
   savePrompt: (prompt) => ipcRenderer.invoke('db-save-prompt', prompt),
   deletePrompt: (promptId) => ipcRenderer.invoke('db-delete-prompt', promptId),
   incrementUsage: (promptId) => ipcRenderer.invoke('db-increment-usage', promptId),

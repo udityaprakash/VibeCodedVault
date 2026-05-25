@@ -57,6 +57,7 @@ export interface IElectronAPI {
   maximize: () => void;
   close: () => void;
   getAllData: () => Promise<DatabaseData>;
+  getAppVersion: () => Promise<string>;
   savePrompt: (prompt: Partial<Prompt> & { title: string; content: string }) => Promise<DatabaseData>;
   deletePrompt: (promptId: string) => Promise<DatabaseData>;
   incrementUsage: (promptId: string) => Promise<DatabaseData>;

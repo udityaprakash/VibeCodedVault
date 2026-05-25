@@ -346,6 +346,7 @@ function App() {
   const [accentColor, setAccentColor] = useState('#8B5CF6');
   const [isThemeSettingsOpen, setIsThemeSettingsOpen] = useState(false);
   const [backupDialog, setBackupDialog] = useState<BackupModalState | null>(null);
+  const [appVersion, setAppVersion] = useState('v1.0.1');
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [isUpdatingVault, setIsUpdatingVault] = useState(false);
@@ -357,6 +358,21 @@ function App() {
   // Load database on start
   useEffect(() => {
     loadDatabase();
+  }, []);
+
+  useEffect(() => {
+    const loadVersion = async () => {
+      if (window.api?.getAppVersion) {
+        try {
+          const version = await window.api.getAppVersion();
+          setAppVersion(version ? `v${String(version).replace(/^v/i, '')}` : 'v1.0.1');
+        } catch {
+          setAppVersion('v1.0.1');
+        }
+      }
+    };
+
+    void loadVersion();
   }, []);
 
   // Restore saved user theme preferences
@@ -1035,6 +1051,7 @@ function App() {
 
         {/* Sidebar Component */}
         <Sidebar
+          appVersion={appVersion}
           categories={categories}
           selectedCategoryId={selectedCategoryId}
           onSelectCategory={setSelectedCategoryId}

@@ -2,6 +2,10 @@
   "name": "work",
   "private": true,
   "version": "1.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/udityaprakash/VibeCodedVault.git"
+  },
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -64,6 +68,14 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "PromptVault"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "udityaprakash",
+        "repo": "VibeCodedVault"
+      }
+    ],
+    "generateUpdatesFilesForAllChannels": true
   }
 }

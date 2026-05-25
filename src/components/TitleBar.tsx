@@ -165,7 +165,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </button>
 
         {settingsOpen && (
-          <div className="absolute top-[44px] right-[136px] w-60 rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md p-3 shadow-2xl z-[100]">
+          <div className="absolute top-[44px] right-[136px] w-[18rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md p-3 shadow-2xl z-[100]">
             <div className="text-[10px] uppercase tracking-widest text-obsidian-500 mb-2">Theme Studio</div>
 
             <div className="flex items-center gap-2 mb-3">
@@ -297,7 +297,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                 <button
                   onClick={onCheckForUpdates}
                   disabled={isCheckingForUpdates}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900 px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold text-obsidian-300 hover:border-cyber-violet/45 hover:text-obsidian-100 transition-colors disabled:opacity-60"
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900 px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold text-obsidian-300 hover:border-cyber-violet/45 hover:text-obsidian-100 transition-colors disabled:opacity-60"
                 >
                   <RefreshCw size={11} className={isCheckingForUpdates ? 'animate-spin' : ''} />
                   {isCheckingForUpdates ? 'Checking' : 'Check now'}
@@ -305,8 +305,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               </div>
 
               {updateInfo ? (
-                <div className="rounded-lg border border-cyber-violet/30 bg-cyber-violet/10 p-2.5">
-                  <div className="flex items-center justify-between gap-3">
+                <div className="rounded-lg border border-cyber-violet/30 bg-cyber-violet/10 p-2.5 overflow-hidden">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="text-[11px] font-semibold text-cyber-violet">Update available</div>
                       <div className="text-[10px] text-obsidian-500">
@@ -316,7 +316,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                     <button
                       onClick={onUpdateNow}
                       disabled={isUpdatingVault}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-cyber-violet/40 bg-cyber-violet/15 px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold text-cyber-violet hover:bg-cyber-violet/25 transition-colors disabled:opacity-60"
+                      className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg border border-cyber-violet/40 bg-cyber-violet/15 px-2.5 py-2 text-[10px] uppercase tracking-wider font-bold text-cyber-violet hover:bg-cyber-violet/25 transition-colors disabled:opacity-60"
                     >
                       <Download size={11} />
                       {isUpdatingVault ? 'Updating' : 'Update Vault now'}
