@@ -354,6 +354,8 @@ function App() {
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [updateDownloadedInfo, setUpdateDownloadedInfo] = useState<any | null>(null);
   const [showInstallModal, setShowInstallModal] = useState(false);
+  const [installLaunching, setInstallLaunching] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   // Load database on start
   useEffect(() => {
@@ -458,6 +460,8 @@ function App() {
           setUpdateDownloadedInfo(info || null);
           setShowInstallModal(true);
           setDownloadProgress(100);
+          setIsUpdatingVault(false);
+          setInstallLaunching(false);
         });
       }
 
@@ -478,6 +482,21 @@ function App() {
         window.api.onUpdateError((err: any) => {
           console.error('Update error:', err);
           triggerNotification('Update error occurred.', 'error');
+          setIsUpdatingVault(false);
+          setInstallError(String(err || 'Update error'));
+        });
+      }
+      if (window.api.onUpdateInstallStarted) {
+        window.api.onUpdateInstallStarted(() => {
+          setInstallLaunching(true);
+          setInstallError(null);
+        });
+      }
+      if (window.api.onUpdateInstallError) {
+        window.api.onUpdateInstallError((err: any) => {
+          setInstallLaunching(false);
+          setInstallError(String(err || 'Installer failed to launch'));
+          triggerNotification('Unable to launch the installer.', 'error');
         });
       }
     } catch (e) {
@@ -530,6 +549,9 @@ function App() {
     }
 
     setIsUpdatingVault(true);
+    setInstallError(null);
+    setDownloadProgress(0);
+    setInstallLaunching(false);
 
     try {
       const result = await window.api.updateNow();
@@ -544,7 +566,10 @@ function App() {
       console.error('Update launch failed:', error);
       triggerNotification('Unable to start the update right now.', 'error');
     } finally {
-      setIsUpdatingVault(false);
+      // Keep the updating state while download is in progress; if no progress events occurred, re-enable controls
+      if (downloadProgress === null || downloadProgress === 0) {
+        setIsUpdatingVault(false);
+      }
     }
   };
 
@@ -554,16 +579,22 @@ function App() {
       return;
     }
 
+    setInstallError(null);
+    setInstallLaunching(true);
     try {
       const res = await window.api.installUpdate();
       if (res && res.success) {
         triggerNotification('Installing update...', 'success');
+        setInstallLaunching(true);
+        return;
       } else {
         triggerNotification(res?.message || 'Failed to start installer.', 'error');
+        setInstallLaunching(false);
       }
     } catch (e) {
       console.error('Install request failed:', e);
       triggerNotification('Failed to start installer.', 'error');
+      setInstallLaunching(false);
     }
   };
 
@@ -997,6 +1028,9 @@ function App() {
         updateInfo={updateInfo}
         isCheckingForUpdates={isCheckingForUpdates}
         isUpdatingVault={isUpdatingVault}
+        downloadProgress={downloadProgress}
+        installLaunching={installLaunching}
+        installError={installError}
         onToggleTheme={handleToggleTheme}
         onToggleSettings={() => setIsThemeSettingsOpen(prev => !prev)}
         onCloseSettings={() => setIsThemeSettingsOpen(false)}

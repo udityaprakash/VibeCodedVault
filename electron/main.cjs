@@ -30,10 +30,12 @@ const GITHUB_OWNER = 'udityaprakash';
 const GITHUB_REPO = 'VibeCodedVault';
 const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 const GITHUB_USER_AGENT = 'PromptVault-Updater';
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null;
 
 // Define storage file paths in the standard AppData folder
 const userDataPath = app.getPath('userData');
 const dbFilePath = path.join(userDataPath, 'prompts_db.json');
+const installErrorLogPath = path.join(userDataPath, 'update-install-error.log');
 
 // Helper to seed initial high-quality prompts and categories
 function getSeedData() {
@@ -227,14 +229,26 @@ async function checkLatestRelease() {
   }
 
   updateCheckInFlight = (async () => {
+    const headers = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': GITHUB_USER_AGENT,
+    };
+    if (GITHUB_TOKEN) {
+      headers.Authorization = `token ${GITHUB_TOKEN}`;
+    }
+
     const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': GITHUB_USER_AGENT,
-      },
+      headers,
     });
 
     if (!response.ok) {
+      // handle 403 (rate limit or auth) with clearer message
+      if (response.status === 403) {
+        const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
+        const msg = `GitHub release check returned 403 (rate limit or auth). x-ratelimit-remaining=${rateLimitRemaining}`;
+        log.error && log.error(msg);
+        throw new Error(msg);
+      }
       throw new Error(`GitHub release check failed with status ${response.status}`);
     }
 
@@ -589,8 +603,25 @@ ipcMain.handle('app-update-now', async () => {
     const installerName = releaseInfo.assetName || `PromptVault-Setup-${releaseInfo.latestVersion}.exe`;
     const installerPath = path.join(os.tmpdir(), installerName);
     await downloadToFile(releaseInfo.assetUrl, installerPath);
-    launchInstaller(installerPath);
-    app.quit();
+    // Notify renderer that installer launch is starting
+    try {
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-started', { installerPath });
+      launchInstaller(installerPath);
+      app.quit();
+    } catch (err) {
+      log.error && log.error('launchInstaller failed:', err);
+      try {
+        const payload = `Timestamp: ${new Date().toISOString()}\nError: ${String(err)}\nStack: ${err && err.stack ? err.stack : 'n/a'}\n`;
+        fs.writeFileSync(installErrorLogPath, payload, 'utf-8');
+      } catch (writeErr) {
+        log.error && log.error('Failed to write install error log:', writeErr);
+      }
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-error', String(err));
+      return {
+        success: false,
+        message: 'Failed to launch installer.',
+      };
+    }
 
     return {
       success: true,
@@ -600,6 +631,13 @@ ipcMain.handle('app-update-now', async () => {
     };
   } catch (error) {
     log.error && log.error('Update launch failed:', error);
+    try {
+      const payload = `Timestamp: ${new Date().toISOString()}\nError: ${String(error)}\nStack: ${error && error.stack ? error.stack : 'n/a'}\n`;
+      fs.writeFileSync(installErrorLogPath, payload, 'utf-8');
+    } catch (writeErr) {
+      log.error && log.error('Failed to write install error log:', writeErr);
+    }
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-error', String(error));
     return {
       success: false,
       message: 'Unable to launch the update right now.',
@@ -642,11 +680,37 @@ ipcMain.handle('app-install-update', async () => {
       return { success: false, message: 'Auto updater not available in this build.' };
     }
 
-    // This will quit and install the downloaded update
-    autoUpdater.quitAndInstall(false, true);
-    return { success: true };
+    // Notify renderer that install is starting
+    try {
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-started', {});
+      // This will quit and install the downloaded update
+      autoUpdater.quitAndInstall(false, true);
+      return { success: true };
+    } catch (err) {
+      log.error && log.error('quitAndInstall failed:', err);
+      try {
+        const payload = `Timestamp: ${new Date().toISOString()}\nError: ${String(err)}\nStack: ${err && err.stack ? err.stack : 'n/a'}\n`;
+        fs.writeFileSync(installErrorLogPath, payload, 'utf-8');
+      } catch (writeErr) {
+        log.error && log.error('Failed to write install error log:', writeErr);
+      }
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-error', String(err));
+      return { success: false, message: String(err) };
+    }
   } catch (err) {
     log.error && log.error('install update failed:', err);
     return { success: false, message: String(err) };
+  }
+});
+
+// Allow renderer to read the last install error log
+ipcMain.handle('app-get-install-error-log', async () => {
+  try {
+    if (!fs.existsSync(installErrorLogPath)) return null;
+    const content = fs.readFileSync(installErrorLogPath, 'utf-8');
+    return content;
+  } catch (err) {
+    log.error && log.error('Failed to read install error log:', err);
+    return null;
   }
 });

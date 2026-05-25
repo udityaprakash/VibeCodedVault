@@ -18,6 +18,9 @@ interface TitleBarProps {
   updateInfo: UpdateInfo | null;
   isCheckingForUpdates: boolean;
   isUpdatingVault: boolean;
+  downloadProgress?: number | null;
+  installLaunching?: boolean;
+  installError?: string | null;
   onToggleTheme: () => void;
   onToggleSettings: () => void;
   onAccentColorChange: (color: string) => void;
@@ -33,6 +36,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   updateInfo,
   isCheckingForUpdates,
   isUpdatingVault,
+  downloadProgress = null,
+  installLaunching = false,
+  installError = null,
   onToggleTheme,
   onToggleSettings,
   onAccentColorChange,
@@ -40,6 +46,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onCheckForUpdates,
   onUpdateNow,
 }) => {
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
   const [customModels, setCustomModels] = useState<string[]>(() => getCustomModels());
@@ -306,7 +314,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
               {updateInfo ? (
                 <div className="rounded-lg border border-cyber-violet/30 bg-cyber-violet/10 p-2.5 overflow-hidden">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
                     <div>
                       <div className="text-[11px] font-semibold text-cyber-violet">Update available</div>
                       <div className="text-[10px] text-obsidian-500">
@@ -316,14 +324,58 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                     <button
                       onClick={onUpdateNow}
                       disabled={isUpdatingVault}
-                      className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg border border-cyber-violet/40 bg-cyber-violet/15 px-2.5 py-2 text-[10px] uppercase tracking-wider font-bold text-cyber-violet hover:bg-cyber-violet/25 transition-colors disabled:opacity-60"
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg border border-cyber-violet/40 bg-cyber-violet/15 px-2.5 py-2 text-[10px] uppercase tracking-wider font-bold text-cyber-violet hover:bg-cyber-violet/25 transition-colors disabled:opacity-60 max-w-full"
                     >
                       <Download size={11} />
                       {isUpdatingVault ? 'Updating' : 'Update Vault now'}
                     </button>
+                    {/* Inline download / install status */}
+                    {(downloadProgress !== null && downloadProgress < 100) && (
+                      <div className="mt-2">
+                        <div className="h-2 w-full rounded bg-obsidian-800 overflow-hidden">
+                          <div className="h-full bg-cyber-violet transition-all" style={{ width: `${downloadProgress}%` }} />
+                        </div>
+                        <div className="text-[10px] text-obsidian-400 mt-1">Downloading update — {downloadProgress}%</div>
+                      </div>
+                    )}
+
+                    {installLaunching && (
+                      <div className="mt-2 flex items-center gap-2 text-[10px] text-obsidian-400">
+                        <RefreshCw size={12} className="animate-spin" />
+                        <span>Launching installer…</span>
+                      </div>
+                    )}
+
+                    {installError && (
+                      <div className="mt-2">
+                        <div className="text-[10px] text-cyber-rose">{installError}</div>
+                        <div className="mt-1">
+                          <button
+                            onClick={async () => {
+                              if (!window.api?.getInstallErrorLog) return;
+                              try {
+                                setLoadingDetails(true);
+                                const txt = await window.api.getInstallErrorLog();
+                                setErrorDetails(txt || 'No further details available.');
+                              } catch (e) {
+                                setErrorDetails('Failed to read error details.');
+                              } finally {
+                                setLoadingDetails(false);
+                              }
+                            }}
+                            className="text-[10px] underline text-obsidian-300 hover:text-obsidian-100"
+                          >
+                            {loadingDetails ? 'Loading details…' : 'Show details'}
+                          </button>
+                        </div>
+                        {errorDetails && (
+                          <pre className="mt-2 max-h-40 overflow-auto text-[11px] p-2 rounded bg-obsidian-900 border border-obsidian-800 text-obsidian-300 whitespace-pre-wrap">{errorDetails}</pre>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {updateInfo.releaseName && (
-                    <div className="mt-1.5 text-[10px] text-obsidian-500 truncate">{updateInfo.releaseName}</div>
+                    <div className="mt-1.5 text-[10px] text-obsidian-500 truncate" style={{ maxWidth: '100%' }}>{updateInfo.releaseName}</div>
                   )}
                 </div>
               ) : (

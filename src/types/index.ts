@@ -74,6 +74,9 @@ export interface IElectronAPI {
   onUpdateDownloadProgress: (cb: (progress: any) => void) => void;
   onUpdateDownloaded: (cb: (info: any) => void) => void;
   onUpdateError: (cb: (err: any) => void) => void;
+  onUpdateInstallStarted: (cb: (info: any) => void) => void;
+  onUpdateInstallError: (cb: (err: any) => void) => void;
+  getInstallErrorLog: () => Promise<string | null>;
 }
 
 declare global {
