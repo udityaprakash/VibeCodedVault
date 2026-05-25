@@ -29,6 +29,7 @@ let updateCheckInFlight = null;
 const GITHUB_OWNER = 'udityaprakash';
 const GITHUB_REPO = 'VibeCodedVault';
 const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
+const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=10`;
 const GITHUB_USER_AGENT = 'PromptVault-Updater';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null;
 
@@ -191,6 +192,22 @@ function findWindowsInstallerAsset(assets) {
   );
 }
 
+function pickLatestRelease(releases) {
+  if (!Array.isArray(releases)) {
+    return null;
+  }
+
+  const sorted = releases
+    .filter(release => release && release.draft !== true)
+    .sort((left, right) => {
+      const leftDate = new Date(left.published_at || left.created_at || 0).getTime();
+      const rightDate = new Date(right.published_at || right.created_at || 0).getTime();
+      return rightDate - leftDate;
+    });
+
+  return sorted[0] || null;
+}
+
 async function checkLatestRelease() {
   // Prefer electron-updater when available for consistent results
   if (autoUpdater) {
@@ -237,7 +254,7 @@ async function checkLatestRelease() {
       headers.Authorization = `token ${GITHUB_TOKEN}`;
     }
 
-    const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
+    const response = await fetch(GITHUB_RELEASES_URL, {
       headers,
     });
 
@@ -252,7 +269,12 @@ async function checkLatestRelease() {
       throw new Error(`GitHub release check failed with status ${response.status}`);
     }
 
-    const release = await response.json();
+    const releases = await response.json();
+    const release = pickLatestRelease(releases);
+    if (!release) {
+      return null;
+    }
+
     const currentVersion = normalizeVersionString(app.getVersion());
     const latestVersion = normalizeVersionString(release.tag_name || release.name || '');
 

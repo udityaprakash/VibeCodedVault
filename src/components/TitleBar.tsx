@@ -314,7 +314,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
               {updateInfo ? (
                 <div className="rounded-lg border border-cyber-violet/30 bg-cyber-violet/10 p-2.5 overflow-hidden">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
+                  <div className="flex flex-col gap-2 min-w-0">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between min-w-0">
                     <div>
                       <div className="text-[11px] font-semibold text-cyber-violet">Update available</div>
                       <div className="text-[10px] text-obsidian-500">
@@ -329,9 +330,11 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                       <Download size={11} />
                       {isUpdatingVault ? 'Updating' : 'Update Vault now'}
                     </button>
+                    </div>
+
                     {/* Inline download / install status */}
                     {(downloadProgress !== null && downloadProgress < 100) && (
-                      <div className="mt-2">
+                      <div className="w-full">
                         <div className="h-2 w-full rounded bg-obsidian-800 overflow-hidden">
                           <div className="h-full bg-cyber-violet transition-all" style={{ width: `${downloadProgress}%` }} />
                         </div>
@@ -340,14 +343,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                     )}
 
                     {installLaunching && (
-                      <div className="mt-2 flex items-center gap-2 text-[10px] text-obsidian-400">
+                      <div className="w-full flex items-center gap-2 text-[10px] text-obsidian-400">
                         <RefreshCw size={12} className="animate-spin" />
                         <span>Launching installer…</span>
                       </div>
                     )}
 
                     {installError && (
-                      <div className="mt-2">
+                      <div className="w-full">
                         <div className="text-[10px] text-cyber-rose">{installError}</div>
                         <div className="mt-1">
                           <button
