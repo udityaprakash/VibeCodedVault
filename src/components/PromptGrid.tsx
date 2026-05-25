@@ -77,10 +77,12 @@ export const PromptGrid: React.FC<PromptGridProps> = ({
                     </span>
                   )}
                   
-                  {/* Model Compatibility Badge */}
-                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border truncate ${getModelColor(prompt.model)}`}>
-                    {prompt.model}
-                  </span>
+                  {/* Model Compatibility Badge (hidden for 'General') */}
+                  {prompt.model && prompt.model.toLowerCase() !== 'general' && (
+                    <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border truncate ${getModelColor(prompt.model)}`}>
+                      {prompt.model}
+                    </span>
+                  )}
                 </div>
 
                 {/* Quick Toggle Actions */}

@@ -51,15 +51,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       {/* Collapse Toggle Button */}
       <button 
+        type="button"
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="titlebar-nodrag absolute -right-3 top-16 bg-obsidian-850 border border-obsidian-700 text-obsidian-400 hover:text-cyber-violet rounded-full p-1 cursor-pointer z-50 transition-all duration-200"
+        className="titlebar-nodrag absolute -right-4 top-16 z-50 flex h-8 w-8 items-center justify-center rounded-full border border-obsidian-700 bg-obsidian-850 text-obsidian-400 shadow-lg shadow-black/20 transition-all duration-200 hover:text-cyber-violet cursor-pointer"
+        aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
-        {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        {isCollapsed ? <ChevronRight size={14} className="pointer-events-none" /> : <ChevronLeft size={14} className="pointer-events-none" />}
       </button>
 
       {/* App Header Branding */}
-      <div className="titlebar-drag p-6 pb-4 flex items-center gap-3">
-        <div className="titlebar-nodrag flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-cyber shadow-glow-violet">
+      <div className={`titlebar-drag pb-4 flex items-center ${isCollapsed ? 'justify-center gap-0 p-4 pt-5' : 'gap-3 p-6'}`}>
+        <div className="titlebar-nodrag flex items-center justify-center w-8 h-8 shrink-0 rounded-lg bg-gradient-cyber shadow-glow-violet">
           <Zap className="text-white" size={16} />
         </div>
         {!isCollapsed && (
@@ -79,40 +82,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
           
           <button
             onClick={() => onSelectCategory(null)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
+            className={`group w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
               selectedCategoryId === null 
-                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet' 
+                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet'
                 : 'text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850/50'
             }`}
             title="All Prompts"
           >
-            <LayoutGrid size={18} className={selectedCategoryId === null ? 'text-cyber-violet' : ''} />
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+              <LayoutGrid size={18} className={`${selectedCategoryId === null ? 'text-cyber-violet' : ''} transition-transform duration-150 ${selectedCategoryId === null ? 'scale-110' : 'group-hover:scale-105'}`} />
+            </span>
             {!isCollapsed && <span>All Prompts</span>}
           </button>
 
           <button
             onClick={() => onSelectCategory('favorites')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
+            className={`group w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
               selectedCategoryId === 'favorites' 
-                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet' 
+                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet'
                 : 'text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850/50'
             }`}
             title="Favorites"
           >
-            <Star size={18} className={selectedCategoryId === 'favorites' ? 'text-yellow-500 fill-yellow-500' : ''} />
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+              <Star size={18} className={`${selectedCategoryId === 'favorites' ? 'text-yellow-500 fill-yellow-500 scale-110' : 'group-hover:scale-105'} transition-transform duration-150`} />
+            </span>
             {!isCollapsed && <span>Favorites</span>}
           </button>
 
           <button
             onClick={() => onSelectCategory('pinned')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
+            className={`group w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer ${
               selectedCategoryId === 'pinned' 
-                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet' 
+                ? 'bg-obsidian-800/80 text-obsidian-100 font-semibold shadow-inner border-l-2 border-cyber-violet'
                 : 'text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850/50'
             }`}
             title="Pinned"
           >
-            <Pin size={18} className={selectedCategoryId === 'pinned' ? 'text-cyber-cyan fill-cyber-cyan' : ''} />
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+              <Pin size={18} className={`${selectedCategoryId === 'pinned' ? 'text-cyber-cyan fill-cyber-cyan scale-110' : 'group-hover:scale-105'} transition-transform duration-150`} />
+            </span>
             {!isCollapsed && <span>Pinned</span>}
           </button>
         </div>

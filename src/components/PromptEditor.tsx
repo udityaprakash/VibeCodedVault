@@ -299,29 +299,31 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex items-center gap-1 bg-obsidian-950 border border-obsidian-850 rounded-lg p-0.5 text-xs">
+          <div className="titlebar-nodrag flex items-center gap-1 bg-obsidian-950 border border-obsidian-850 rounded-lg p-0.5 text-xs">
             <button
+              type="button"
               onClick={() => setActiveTab('editor')}
-              className={`px-3 py-1 rounded-md font-semibold cursor-pointer transition-all ${
+              className={`px-3 py-1 rounded-md font-semibold cursor-pointer transition-all titlebar-nodrag ${
                 activeTab === 'editor' ? 'bg-obsidian-800 text-obsidian-100 shadow' : 'text-obsidian-400 hover:text-obsidian-200'
               }`}
             >
-              <span className="flex items-center gap-1.5">
+              <span className="pointer-events-none flex items-center gap-1.5">
                 <Edit size={12} />
                 Editor
               </span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('compiler')}
-              className={`px-3 py-1 rounded-md font-semibold cursor-pointer transition-all relative ${
+              className={`px-3 py-1 rounded-md font-semibold cursor-pointer transition-all relative titlebar-nodrag ${
                 activeTab === 'compiler' ? 'bg-obsidian-800 text-obsidian-100 shadow' : 'text-obsidian-400 hover:text-obsidian-200'
               }`}
             >
-              <span className="flex items-center gap-1.5">
+              <span className="pointer-events-none flex items-center gap-1.5">
                 <Eye size={12} />
                 Compiler
                 {variableKeys.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-cyber-cyan text-black font-extrabold text-[8px] h-4 w-4 rounded-full flex items-center justify-center border border-obsidian-950">
+                  <span className="pointer-events-none absolute -top-1 -right-1 bg-cyber-cyan text-black font-extrabold text-[8px] h-4 w-4 rounded-full flex items-center justify-center border border-obsidian-950">
                     {variableKeys.length}
                   </span>
                 )}
@@ -329,12 +331,13 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
             </button>
             {prompt && (
               <button
+                type="button"
                 onClick={() => setActiveTab('history')}
-                className={`px-3 py-1 rounded-md font-semibold cursor-pointer transition-all ${
+                className={`px-3 py-1 rounded-md font-semibold cursor-pointer transition-all titlebar-nodrag ${
                   activeTab === 'history' ? 'bg-obsidian-800 text-obsidian-100 shadow' : 'text-obsidian-400 hover:text-obsidian-200'
                 }`}
               >
-                <span className="flex items-center gap-1.5">
+                <span className="pointer-events-none flex items-center gap-1.5">
                   <History size={12} />
                   Revisions
                 </span>

@@ -1,11 +1,8 @@
 export const PRESET_MODELS = [
   'General',
-  'Claude 3.5 Sonnet',
-  'GPT-4o / ChatGPT',
-  'Gemini 1.5 Pro',
-  'Midjourney v6',
-  'Stable Diffusion 3',
-  'Llama 3.1',
+  'Anthropic Claude',
+  'OpenAi ChatGPT',
+  'Google Gemini',
 ];
 
 export const CUSTOM_MODELS_STORAGE_KEY = 'promptvault-custom-models';
