@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Minus, Moon, Plus, Settings2, Square, Sun, Tag, Trash2, X } from 'lucide-react';
+import { Download, Minus, Moon, Plus, RefreshCw, Settings2, Square, Sun, Tag, Trash2, X } from 'lucide-react';
 import {
   PRESET_MODELS,
   getCustomModels,
@@ -7,6 +7,7 @@ import {
   resolveExistingModelName,
   saveCustomModels,
 } from '../utils/aiModels';
+import type { UpdateInfo } from '../types';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -14,20 +15,30 @@ interface TitleBarProps {
   themeMode: ThemeMode;
   accentColor: string;
   settingsOpen: boolean;
+  updateInfo: UpdateInfo | null;
+  isCheckingForUpdates: boolean;
+  isUpdatingVault: boolean;
   onToggleTheme: () => void;
   onToggleSettings: () => void;
   onAccentColorChange: (color: string) => void;
   onCloseSettings: () => void;
+  onCheckForUpdates: () => void;
+  onUpdateNow: () => void;
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
   themeMode,
   accentColor,
   settingsOpen,
+  updateInfo,
+  isCheckingForUpdates,
+  isUpdatingVault,
   onToggleTheme,
   onToggleSettings,
   onAccentColorChange,
   onCloseSettings,
+  onCheckForUpdates,
+  onUpdateNow,
 }) => {
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
@@ -274,6 +285,51 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                 </div>
               </div>
             )}
+
+            <div className="mt-3 pt-3 border-t border-obsidian-850/70">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-obsidian-500">Vault Updates</div>
+                  <div className="text-[11px] text-obsidian-400">
+                    {updateInfo ? `v${updateInfo.latestVersion} available` : 'Check GitHub releases for new builds'}
+                  </div>
+                </div>
+                <button
+                  onClick={onCheckForUpdates}
+                  disabled={isCheckingForUpdates}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900 px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold text-obsidian-300 hover:border-cyber-violet/45 hover:text-obsidian-100 transition-colors disabled:opacity-60"
+                >
+                  <RefreshCw size={11} className={isCheckingForUpdates ? 'animate-spin' : ''} />
+                  {isCheckingForUpdates ? 'Checking' : 'Check now'}
+                </button>
+              </div>
+
+              {updateInfo ? (
+                <div className="rounded-lg border border-cyber-violet/30 bg-cyber-violet/10 p-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold text-cyber-violet">Update available</div>
+                      <div className="text-[10px] text-obsidian-500">
+                        Current v{updateInfo.currentVersion} → Latest v{updateInfo.latestVersion}
+                      </div>
+                    </div>
+                    <button
+                      onClick={onUpdateNow}
+                      disabled={isUpdatingVault}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-cyber-violet/40 bg-cyber-violet/15 px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold text-cyber-violet hover:bg-cyber-violet/25 transition-colors disabled:opacity-60"
+                    >
+                      <Download size={11} />
+                      {isUpdatingVault ? 'Updating' : 'Update Vault now'}
+                    </button>
+                  </div>
+                  {updateInfo.releaseName && (
+                    <div className="mt-1.5 text-[10px] text-obsidian-500 truncate">{updateInfo.releaseName}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-[10px] text-obsidian-500">Auto-check runs on launch and every few hours.</div>
+              )}
+            </div>
           </div>
         )}
 

@@ -18,4 +18,15 @@ contextBridge.exposeInMainWorld('api', {
   // Backup / Import API
   exportBackup: (backupPayload) => ipcRenderer.invoke('db-export-backup', backupPayload),
   importBackup: () => ipcRenderer.invoke('db-import-backup'),
+
+  // Application updates
+  checkForUpdates: () => ipcRenderer.invoke('app-check-for-updates'),
+  updateNow: () => ipcRenderer.invoke('app-update-now'),
+  // Event subscriptions for update lifecycle
+  onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (evt, info) => cb(info)),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', (evt, info) => cb(info)),
+  onUpdateDownloadProgress: (cb) => ipcRenderer.on('update-download-progress', (evt, progress) => cb(progress)),
+  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', (evt, info) => cb(info)),
+  onUpdateError: (cb) => ipcRenderer.on('update-error', (evt, err) => cb(err)),
+  installUpdate: () => ipcRenderer.invoke('app-install-update'),
 });

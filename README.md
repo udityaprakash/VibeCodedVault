@@ -13,6 +13,7 @@ PromptVault is a local-first Electron desktop app for managing AI prompts, categ
 - Manage theme mode, accent color, and custom AI models.
 - Export and import prompts and theme data through an in-app backup picker.
 - Enforce a 30-character maximum for new category names.
+- Check GitHub releases for updates and launch the latest installer from Settings.
 
 ## Architecture Diagram
 
@@ -220,6 +221,7 @@ sequenceDiagram
 ## Implementation Notes
 
 - `electron/main.cjs` owns window controls, database reads/writes, and backup import/export dialogs.
+- `electron/main.cjs` also checks GitHub releases for app updates and launches the newest installer.
 - `electron/preload.cjs` exposes the `window.api` surface used by the renderer.
 - `src/App.tsx` orchestrates filtering, persistence, notifications, imports, exports, and editor state.
 - `src/components/PromptEditor.tsx` handles prompt editing, template compilation, revision history, and custom model creation.

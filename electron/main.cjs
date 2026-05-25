@@ -1,9 +1,35 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const { spawn } = require('child_process');
+const { Readable } = require('stream');
+
+let autoUpdater;
+let log;
+try {
+  // electron-updater is optional (dev vs packaged). Require if available.
+  const updaterModule = require('electron-updater');
+  autoUpdater = updaterModule.autoUpdater;
+  log = require('electron-log');
+  autoUpdater.logger = log;
+  autoUpdater.autoDownload = false; // require explicit download
+  log.info('electron-updater loaded');
+} catch (e) {
+  // Not available in dev environment or not installed; we'll keep the previous custom logic.
+  autoUpdater = null;
+  log = console;
+  log.info && log.info('electron-updater not available, using fallback updater');
+}
 
 const isDev = !app.isPackaged;
 let mainWindow;
+let updateCheckInFlight = null;
+
+const GITHUB_OWNER = 'udityaprakash';
+const GITHUB_REPO = 'VibeCodedVault';
+const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
+const GITHUB_USER_AGENT = 'PromptVault-Updater';
 
 // Define storage file paths in the standard AppData folder
 const userDataPath = app.getPath('userData');
@@ -120,6 +146,160 @@ function getBackupFileName(backupPayload) {
   if (hasTheme) return 'promptvault_theme_backup.json';
   if (hasPrompts) return 'promptvault_prompts_backup.json';
   return 'promptvault_backup.json';
+}
+
+function normalizeVersionString(version) {
+  return String(version || '').trim().replace(/^v/i, '');
+}
+
+function parseVersionParts(version) {
+  return normalizeVersionString(version)
+    .split('.')
+    .map(part => {
+      const parsed = Number.parseInt(part.replace(/[^0-9]/g, ''), 10);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    });
+}
+
+function compareVersionStrings(left, right) {
+  const leftParts = parseVersionParts(left);
+  const rightParts = parseVersionParts(right);
+  const length = Math.max(leftParts.length, rightParts.length, 3);
+
+  for (let index = 0; index < length; index += 1) {
+    const leftValue = leftParts[index] || 0;
+    const rightValue = rightParts[index] || 0;
+
+    if (leftValue > rightValue) return 1;
+    if (leftValue < rightValue) return -1;
+  }
+
+  return 0;
+}
+
+function findWindowsInstallerAsset(assets) {
+  if (!Array.isArray(assets)) {
+    return null;
+  }
+
+  return (
+    assets.find(asset => typeof asset?.name === 'string' && /setup.*\.exe$/i.test(asset.name))
+    || assets.find(asset => typeof asset?.name === 'string' && /\.exe$/i.test(asset.name))
+    || null
+  );
+}
+
+async function checkLatestRelease() {
+  // Prefer electron-updater when available for consistent results
+  if (autoUpdater) {
+    try {
+      const res = await autoUpdater.checkForUpdates();
+      if (!res || !res.updateInfo || !res.cancellationToken) {
+        // If no update, return null
+        if (!res || !res.updateInfo || !res.updateInfo.version) return null;
+      }
+
+      const currentVersion = normalizeVersionString(app.getVersion());
+      const latestVersion = normalizeVersionString(res.updateInfo.version || res.updateInfo.tag_name || '');
+
+      if (!latestVersion || compareVersionStrings(latestVersion, currentVersion) <= 0) {
+        return null;
+      }
+
+      return {
+        currentVersion,
+        latestVersion,
+        releaseName: res.updateInfo.name || res.updateInfo.tag_name || `v${latestVersion}`,
+        releaseUrl: res.updateInfo.html_url || null,
+        releaseNotes: res.updateInfo.releaseNotes || res.updateInfo.body || '',
+        publishedAt: res.updateInfo.publishedAt || null,
+        assetName: null,
+        assetUrl: null,
+      };
+    } catch (err) {
+      log.error('autoUpdater check failed:', err);
+      // fall through to previous GitHub fetch fallback
+    }
+  }
+
+  if (updateCheckInFlight) {
+    return updateCheckInFlight;
+  }
+
+  updateCheckInFlight = (async () => {
+    const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': GITHUB_USER_AGENT,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub release check failed with status ${response.status}`);
+    }
+
+    const release = await response.json();
+    const currentVersion = normalizeVersionString(app.getVersion());
+    const latestVersion = normalizeVersionString(release.tag_name || release.name || '');
+
+    if (!latestVersion || compareVersionStrings(latestVersion, currentVersion) <= 0) {
+      return null;
+    }
+
+    const asset = findWindowsInstallerAsset(release.assets);
+
+    return {
+      currentVersion,
+      latestVersion,
+      releaseName: release.name || release.tag_name || `v${latestVersion}`,
+      releaseUrl: release.html_url,
+      releaseNotes: release.body || '',
+      publishedAt: release.published_at || null,
+      assetName: asset?.name || null,
+      assetUrl: asset?.browser_download_url || null,
+    };
+  })();
+
+  try {
+    return await updateCheckInFlight;
+  } finally {
+    updateCheckInFlight = null;
+  }
+}
+
+async function downloadToFile(url, destinationPath) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/octet-stream',
+      'User-Agent': GITHUB_USER_AGENT,
+    },
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to download update asset (${response.status})`);
+  }
+
+  await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+
+  await new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(destinationPath);
+    const input = Readable.fromWeb(response.body);
+
+    input.on('error', reject);
+    output.on('error', reject);
+    output.on('finish', resolve);
+    input.pipe(output);
+  });
+}
+
+function launchInstaller(installerPath) {
+  const child = spawn(installerPath, [], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+
+  child.unref();
 }
 
 function createWindow() {
@@ -354,5 +534,115 @@ ipcMain.handle('db-import-backup', async () => {
   } catch (e) {
     console.error('Import failed:', e);
     return false;
+  }
+});
+
+// ==========================================
+// IPC HANDLERS - APPLICATION UPDATES
+// ==========================================
+ipcMain.handle('app-check-for-updates', async () => {
+  try {
+    return await checkLatestRelease();
+  } catch (error) {
+    log.error && log.error('Update check failed:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('app-update-now', async () => {
+  try {
+    // If electron-updater is available, use its download + install flow
+    if (autoUpdater) {
+      const check = await autoUpdater.checkForUpdates();
+      if (!check || !check.updateInfo || !check.updateInfo.version) {
+        return { success: false, message: 'No update is currently available.' };
+      }
+
+      // Start download
+      autoUpdater.downloadUpdate();
+
+      // Return immediately; the renderer will be notified via events when download completes.
+      return { success: true, launchedInstaller: false, message: 'Downloading update...' };
+    }
+
+    // Fallback: previous behavior (download file and launch)
+    const releaseInfo = await checkLatestRelease();
+
+    if (!releaseInfo) {
+      return { success: false, message: 'No update is currently available.' };
+    }
+
+    if (!releaseInfo.assetUrl) {
+      await shell.openExternal(releaseInfo.releaseUrl);
+      return {
+        success: true,
+        launchedInstaller: false,
+        message: 'Opened the latest release page in your browser.',
+        releaseUrl: releaseInfo.releaseUrl,
+      };
+    }
+
+    const installerName = releaseInfo.assetName || `PromptVault-Setup-${releaseInfo.latestVersion}.exe`;
+    const installerPath = path.join(os.tmpdir(), installerName);
+    await downloadToFile(releaseInfo.assetUrl, installerPath);
+    launchInstaller(installerPath);
+    app.quit();
+
+    return {
+      success: true,
+      launchedInstaller: true,
+      message: 'Update installer launched.',
+      releaseUrl: releaseInfo.releaseUrl,
+    };
+  } catch (error) {
+    log.error && log.error('Update launch failed:', error);
+    return {
+      success: false,
+      message: 'Unable to launch the update right now.',
+    };
+  }
+});
+
+// Wire autoUpdater events to renderer for progress and availability
+if (autoUpdater) {
+  autoUpdater.on('error', (err) => {
+    log.error && log.error('autoUpdater error:', err);
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-error', String(err));
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    log.info && log.info('update-available', info);
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-available', info);
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    log.info && log.info('update-not-available', info);
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-not-available', info);
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-download-progress', progress);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info && log.info('update-downloaded', info);
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-downloaded', info);
+    // Do not auto-install — wait for renderer confirmation to install so user can accept.
+  });
+}
+
+// Renderer can request install after user confirmation
+ipcMain.handle('app-install-update', async () => {
+  try {
+    if (!autoUpdater) {
+      return { success: false, message: 'Auto updater not available in this build.' };
+    }
+
+    // This will quit and install the downloaded update
+    autoUpdater.quitAndInstall();
+    return { success: true };
+  } catch (err) {
+    log.error && log.error('install update failed:', err);
+    return { success: false, message: String(err) };
   }
 });

@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/Sidebar';
 import { PromptGrid } from './components/PromptGrid';
 import { PromptEditor } from './components/PromptEditor';
 import { CommandPalette } from './components/CommandPalette';
 import { BackupDialog } from './components/BackupDialog';
-import type { Category, Prompt, DatabaseData } from './types';
+import type { Category, Prompt, DatabaseData, UpdateInfo } from './types';
 import { 
   Search, Terminal, Plus, Zap, Bookmark, AlertTriangle, Layers
 } from 'lucide-react';
@@ -14,6 +14,7 @@ import { PRESET_MODELS, getCustomModels, saveCustomModels } from './utils/aiMode
 type ThemeMode = 'light' | 'dark';
 
 const THEME_STORAGE_KEY = 'promptvault-theme-preferences';
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 type BackupSelection = {
   prompts: boolean;
@@ -345,6 +346,13 @@ function App() {
   const [accentColor, setAccentColor] = useState('#8B5CF6');
   const [isThemeSettingsOpen, setIsThemeSettingsOpen] = useState(false);
   const [backupDialog, setBackupDialog] = useState<BackupModalState | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
+  const [isUpdatingVault, setIsUpdatingVault] = useState(false);
+  const lastNotifiedUpdateVersionRef = useRef<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [updateDownloadedInfo, setUpdateDownloadedInfo] = useState<any | null>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
 
   // Load database on start
   useEffect(() => {
@@ -407,9 +415,140 @@ function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeys);
   }, []);
 
+  useEffect(() => {
+    void checkForUpdates(true);
+
+    const intervalId = window.setInterval(() => {
+      void checkForUpdates(true);
+    }, UPDATE_CHECK_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  // Subscribe to updater events from preload bridge
+  useEffect(() => {
+    try {
+      if (!window.api) return;
+
+      if (window.api.onUpdateDownloadProgress) {
+        window.api.onUpdateDownloadProgress((progress: any) => {
+          const pct = Math.round(progress.percent || (progress.transferred && progress.total ? (progress.transferred / progress.total) * 100 : 0));
+          setDownloadProgress(Number.isFinite(pct) ? pct : 0);
+        });
+      }
+
+      if (window.api.onUpdateDownloaded) {
+        window.api.onUpdateDownloaded((info: any) => {
+          setUpdateDownloadedInfo(info || null);
+          setShowInstallModal(true);
+          setDownloadProgress(100);
+        });
+      }
+
+      if (window.api.onUpdateAvailable) {
+        window.api.onUpdateAvailable((info: any) => {
+          setUpdateInfo(info || null);
+          triggerNotification('Update available.', 'info');
+        });
+      }
+
+      if (window.api.onUpdateNotAvailable) {
+        window.api.onUpdateNotAvailable(() => {
+          setUpdateInfo(null);
+        });
+      }
+
+      if (window.api.onUpdateError) {
+        window.api.onUpdateError((err: any) => {
+          console.error('Update error:', err);
+          triggerNotification('Update error occurred.', 'error');
+        });
+      }
+    } catch (e) {
+      console.warn('Updater event subscription failed:', e);
+    }
+  }, []);
+
   const triggerNotification = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  const checkForUpdates = async (quiet = false) => {
+    if (!window.api?.checkForUpdates) {
+      return null;
+    }
+
+    setIsCheckingForUpdates(true);
+
+    try {
+      const info = await window.api.checkForUpdates();
+      setUpdateInfo(info);
+
+      if (info && info.latestVersion !== lastNotifiedUpdateVersionRef.current) {
+        lastNotifiedUpdateVersionRef.current = info.latestVersion;
+
+        if (!quiet) {
+          triggerNotification(`Update ${info.latestVersion} is available.`, 'info');
+        }
+      } else if (!info && !quiet) {
+        triggerNotification('You are running the latest version.', 'success');
+      }
+
+      return info;
+    } catch (error) {
+      console.error('Update check failed:', error);
+      if (!quiet) {
+        triggerNotification('Unable to check for updates right now.', 'error');
+      }
+      return null;
+    } finally {
+      setIsCheckingForUpdates(false);
+    }
+  };
+
+  const handleUpdateNow = async () => {
+    if (!window.api?.updateNow) {
+      triggerNotification('Update support is unavailable in this build.', 'error');
+      return;
+    }
+
+    setIsUpdatingVault(true);
+
+    try {
+      const result = await window.api.updateNow();
+
+      if (result.success) {
+        triggerNotification(result.message || 'Update started successfully.', 'success');
+        return;
+      }
+
+      triggerNotification(result.message || 'Unable to start the update right now.', 'error');
+    } catch (error) {
+      console.error('Update launch failed:', error);
+      triggerNotification('Unable to start the update right now.', 'error');
+    } finally {
+      setIsUpdatingVault(false);
+    }
+  };
+
+  const handleInstallNow = async () => {
+    if (!window.api?.installUpdate) {
+      triggerNotification('Install action unavailable.', 'error');
+      return;
+    }
+
+    try {
+      const res = await window.api.installUpdate();
+      if (res && res.success) {
+        triggerNotification('Installing update...', 'success');
+      } else {
+        triggerNotification(res?.message || 'Failed to start installer.', 'error');
+      }
+    } catch (e) {
+      console.error('Install request failed:', e);
+      triggerNotification('Failed to start installer.', 'error');
+    }
   };
 
   const loadDatabase = async () => {
@@ -839,11 +978,53 @@ function App() {
         themeMode={themeMode}
         accentColor={accentColor}
         settingsOpen={isThemeSettingsOpen}
+        updateInfo={updateInfo}
+        isCheckingForUpdates={isCheckingForUpdates}
+        isUpdatingVault={isUpdatingVault}
         onToggleTheme={handleToggleTheme}
         onToggleSettings={() => setIsThemeSettingsOpen(prev => !prev)}
         onCloseSettings={() => setIsThemeSettingsOpen(false)}
         onAccentColorChange={handleAccentColorChange}
+        onCheckForUpdates={() => void checkForUpdates(false)}
+        onUpdateNow={() => void handleUpdateNow()}
       />
+
+      {/* Update Download / Install Modal */}
+      {showInstallModal && (
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-obsidian-950/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl p-5 bg-obsidian-900 border border-obsidian-800 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm font-semibold text-obsidian-100">Update ready to install</div>
+                <div className="text-xs text-obsidian-400 mt-1">Version {updateDownloadedInfo?.version || updateInfo?.latestVersion || 'unknown'} has finished downloading.</div>
+              </div>
+              <button onClick={() => setShowInstallModal(false)} className="text-obsidian-400 hover:text-obsidian-100">✕</button>
+            </div>
+
+            <div className="mt-4">
+              <div className="h-2 w-full rounded bg-obsidian-800 overflow-hidden">
+                <div className="h-full bg-cyber-violet transition-all" style={{ width: `${downloadProgress ?? 0}%` }} />
+              </div>
+              <div className="text-[11px] text-obsidian-400 mt-2">{downloadProgress ?? 0}% downloaded</div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowInstallModal(false)}
+                className="rounded-lg px-3 py-1.5 text-sm border border-obsidian-800 bg-obsidian-900 text-obsidian-300 hover:border-obsidian-700"
+              >
+                Later
+              </button>
+              <button
+                onClick={() => handleInstallNow()}
+                className="rounded-lg px-3 py-1.5 text-sm bg-cyber-violet text-white font-semibold hover:opacity-90"
+              >
+                Install and Relaunch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main App Window Layout */}
       <div className="flex-1 flex overflow-hidden relative">
