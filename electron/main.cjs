@@ -317,25 +317,114 @@ async function downloadToFile(url, destinationPath) {
 
   await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
 
-  await new Promise((resolve, reject) => {
+  // Attempt to stream the response and report progress to renderer
+  return new Promise((resolve, reject) => {
+    const total = Number(response.headers.get('content-length')) || 0;
+    let transferred = 0;
     const output = fs.createWriteStream(destinationPath);
-    const input = Readable.fromWeb(response.body);
+    const reader = response.body.getReader();
 
-    input.on('error', reject);
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) {
+          output.end(() => resolve());
+          return;
+        }
+
+        try {
+          const chunk = Buffer.from(value);
+          transferred += chunk.length;
+          output.write(chunk);
+
+          // send progress event similar to electron-updater
+          try {
+            if (mainWindow && mainWindow.webContents) {
+              const percent = total ? (transferred / total) * 100 : 0;
+              mainWindow.webContents.send('update-download-progress', {
+                percent: Math.round(percent),
+                transferred,
+                total,
+              });
+            }
+          } catch (e) {
+            // ignore
+          }
+
+          pump();
+        } catch (err) {
+          reject(err);
+        }
+      }).catch(err => reject(err));
+    }
+
+    reader.read().then(({ done, value }) => {
+      if (done) {
+        output.end(() => resolve());
+        return;
+      }
+      const chunk = Buffer.from(value);
+      transferred += chunk.length;
+      output.write(chunk);
+      try {
+        if (mainWindow && mainWindow.webContents) {
+          const percent = total ? (transferred / total) * 100 : 0;
+          mainWindow.webContents.send('update-download-progress', {
+            percent: Math.round(percent),
+            transferred,
+            total,
+          });
+        }
+      } catch (e) {}
+      pump();
+    }).catch(err => reject(err));
+
     output.on('error', reject);
-    output.on('finish', resolve);
-    input.pipe(output);
+    output.on('finish', () => resolve());
   });
 }
 
 function launchInstaller(installerPath) {
-  const child = spawn(installerPath, [], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  });
+  // Try spawning the installer directly. On Windows this can fail with EBUSY
+  // if the file is locked by antivirus or another process. Retry a few
+  // times with a short delay, then fall back to using shell.openPath.
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  child.unref();
+  const trySpawn = async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const child = spawn(installerPath, [], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+        child.unref();
+        return true;
+      } catch (err) {
+        log.error && log.error(`spawn attempt ${attempt + 1} failed:`, err && err.code ? err.code : err);
+        // If last attempt, rethrow so caller can handle logging
+        if (attempt < 2) {
+          // small backoff before retrying
+          // eslint-disable-next-line no-await-in-loop
+          await sleep(250 + attempt * 150);
+          continue;
+        }
+        throw err;
+      }
+    }
+    return false;
+  };
+
+  return trySpawn().catch(async (spawnErr) => {
+    log.error && log.error('spawn failed for installer, falling back to shell.openPath:', spawnErr);
+    try {
+      // shell.openPath returns a promise with empty string on success
+      await shell.openPath(installerPath);
+      return true;
+    } catch (openErr) {
+      log.error && log.error('shell.openPath fallback failed:', openErr);
+      throw spawnErr;
+    }
+  });
 }
 
 function createWindow() {
@@ -624,11 +713,18 @@ ipcMain.handle('app-update-now', async () => {
 
     const installerName = releaseInfo.assetName || `PromptVault-Setup-${releaseInfo.latestVersion}.exe`;
     const installerPath = path.join(os.tmpdir(), installerName);
+    // Notify renderer that download is starting
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-download-progress', { percent: 0, transferred: 0, total: 0 });
     await downloadToFile(releaseInfo.assetUrl, installerPath);
+    // notify renderer that download completed
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('update-download-progress', { percent: 100, transferred: 0, total: 0 });
+      mainWindow.webContents.send('update-downloaded', { version: releaseInfo.latestVersion, path: installerPath });
+    }
     // Notify renderer that installer launch is starting
     try {
       if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-started', { installerPath });
-      launchInstaller(installerPath);
+      await launchInstaller(installerPath);
       app.quit();
     } catch (err) {
       log.error && log.error('launchInstaller failed:', err);
