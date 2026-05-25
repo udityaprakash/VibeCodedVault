@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { PromptGrid } from './components/PromptGrid';
 import { PromptEditor } from './components/PromptEditor';
 import { CommandPalette } from './components/CommandPalette';
+import { BackupDialog } from './components/BackupDialog';
 import type { Category, Prompt, DatabaseData } from './types';
 import { 
   Search, Terminal, Plus, Zap, Bookmark, AlertTriangle, Layers
@@ -14,35 +15,44 @@ type ThemeMode = 'light' | 'dark';
 
 const THEME_STORAGE_KEY = 'promptvault-theme-preferences';
 
-type BackupScope = 'workspace' | 'prompts';
+type BackupSelection = {
+  prompts: boolean;
+  theme: boolean;
+};
 
-interface WorkspaceBackupPayload {
+interface PromptsBackupSection {
+  prompts: Prompt[];
+  categories: Category[];
+}
+
+interface ThemeBackupSection {
+  themeMode: ThemeMode;
+  accentColor: string;
+  customModels: string[];
+}
+
+interface BackupPayloadV3 {
   kind: 'promptvault-backup';
-  version: 2;
-  scope: 'workspace';
-  exportedAt: number;
+  version: 3;
   data: {
-    categories: Category[];
-    prompts: Prompt[];
-    settings: {
-      themeMode: ThemeMode;
-      accentColor: string;
-      customModels: string[];
-    };
+    prompts?: PromptsBackupSection;
+    theme?: ThemeBackupSection;
   };
 }
 
-interface PromptsBackupPayload {
-  kind: 'promptvault-backup';
-  version: 2;
-  scope: 'prompts';
-  exportedAt: number;
-  data: {
-    prompts: Prompt[];
-  };
+type BackupPayload = BackupPayloadV3;
+
+interface ParsedBackupPayload {
+  prompts?: PromptsBackupSection;
+  theme?: ThemeBackupSection;
 }
 
-type BackupPayload = WorkspaceBackupPayload | PromptsBackupPayload;
+interface BackupModalState {
+  mode: 'export' | 'import';
+  available: BackupSelection;
+  selected: BackupSelection;
+  parsedPayload?: ParsedBackupPayload;
+}
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -77,11 +87,11 @@ const adjustHex = (hex: string, amount: number) => {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 };
 
-const isPromptArray = (value: unknown): value is Prompt[] =>
-  Array.isArray(value);
+const isPromptArray = (value: unknown): value is Prompt[] => Array.isArray(value);
 
-const isCategoryArray = (value: unknown): value is Category[] =>
-  Array.isArray(value);
+const isCategoryArray = (value: unknown): value is Category[] => Array.isArray(value);
+
+const isThemeMode = (value: unknown): value is ThemeMode => value === 'light' || value === 'dark';
 
 const getVersionKey = (version: Prompt['versions'][number]) =>
   version.id || `${version.version}:${version.timestamp}:${version.content}`;
@@ -219,61 +229,50 @@ const mergeCategoriesWithoutOverwriting = (base: Category[], incoming: Category[
   return [...base, ...normalizedIncoming.filter(item => !base.some(existing => existing.id === item.id))];
 };
 
-const parseBackupPayload = (raw: unknown): { scope: BackupScope; prompts: Prompt[]; categories?: Category[]; settings?: WorkspaceBackupPayload['data']['settings'] } | null => {
+const parseBackupPayload = (raw: unknown): ParsedBackupPayload | null => {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
 
   const backup = raw as Record<string, unknown>;
 
-  if (backup.kind === 'promptvault-backup' && backup.version === 2 && backup.scope === 'workspace') {
-    const data = backup.data as Record<string, unknown> | undefined;
-    if (!data || !isPromptArray(data.prompts) || !isCategoryArray(data.categories)) {
+  if (backup.kind !== 'promptvault-backup' || backup.version !== 3) {
+    return null;
+  }
+
+  const data = backup.data as Record<string, unknown> | undefined;
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const parsed: ParsedBackupPayload = {};
+
+  if (data.prompts && typeof data.prompts === 'object') {
+    const promptsSection = data.prompts as Record<string, unknown>;
+    if (!isPromptArray(promptsSection.prompts) || !isCategoryArray(promptsSection.categories)) {
       return null;
     }
 
-    const settings = (data.settings && typeof data.settings === 'object')
-      ? data.settings as WorkspaceBackupPayload['data']['settings']
-      : undefined;
-
-    return {
-      scope: 'workspace',
-      prompts: data.prompts,
-      categories: data.categories,
-      settings,
+    parsed.prompts = {
+      prompts: promptsSection.prompts,
+      categories: promptsSection.categories,
     };
   }
 
-  if (backup.kind === 'promptvault-backup' && backup.version === 2 && backup.scope === 'prompts') {
-    const data = backup.data as Record<string, unknown> | undefined;
-    if (!data || !isPromptArray(data.prompts)) {
+  if (data.theme && typeof data.theme === 'object') {
+    const themeSection = data.theme as Record<string, unknown>;
+    if (!isThemeMode(themeSection.themeMode) || typeof themeSection.accentColor !== 'string' || !Array.isArray(themeSection.customModels)) {
       return null;
     }
 
-    return {
-      scope: 'prompts',
-      prompts: data.prompts,
+    parsed.theme = {
+      themeMode: themeSection.themeMode,
+      accentColor: themeSection.accentColor,
+      customModels: themeSection.customModels.filter((item): item is string => typeof item === 'string'),
     };
   }
 
-  // Legacy format compatibility: treat as workspace backup
-  if (isPromptArray(backup.prompts) && isCategoryArray(backup.categories)) {
-    return {
-      scope: 'workspace',
-      prompts: backup.prompts,
-      categories: backup.categories,
-    };
-  }
-
-  // Legacy prompt-only format compatibility
-  if (isPromptArray(backup.prompts)) {
-    return {
-      scope: 'prompts',
-      prompts: backup.prompts,
-    };
-  }
-
-  return null;
+  return parsed.prompts || parsed.theme ? parsed : null;
 };
 
 // Robust local fallback seed data for browser/quick testing
@@ -345,6 +344,7 @@ function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
   const [accentColor, setAccentColor] = useState('#8B5CF6');
   const [isThemeSettingsOpen, setIsThemeSettingsOpen] = useState(false);
+  const [backupDialog, setBackupDialog] = useState<BackupModalState | null>(null);
 
   // Load database on start
   useEffect(() => {
@@ -510,20 +510,25 @@ function App() {
 
   const handleAddCategory = async (name: string, icon: string, color: string) => {
     try {
+      const normalizedName = name.trim().slice(0, 30);
+      if (!normalizedName) {
+        return;
+      }
+
       if (window.api && window.api.saveCategory) {
-        const data = await window.api.saveCategory({ name, icon, color });
+        const data = await window.api.saveCategory({ name: normalizedName, icon, color });
         setPrompts(data.prompts);
         setCategories(data.categories);
-        triggerNotification(`Category "${name}" created.`);
+        triggerNotification(`Category "${normalizedName}" created.`);
       } else {
         const newCat: Category = {
           id: 'mock_cat_' + Math.random().toString(36).substr(2, 9),
-          name,
+          name: normalizedName,
           icon,
           color
         };
         setCategories(prev => [...prev, newCat]);
-        triggerNotification(`Category "${name}" created locally.`);
+        triggerNotification(`Category "${normalizedName}" created locally.`);
       }
     } catch (e) {
       console.error('Add category failed:', e);
@@ -559,75 +564,11 @@ function App() {
   };
 
   const handleExportBackup = async () => {
-    try {
-      const selectedScope: BackupScope = confirm(
-        'Export entire workspace?\n\nOK = Entire Workspace (prompts, categories, theme, AI models)\nCancel = Prompts only'
-      )
-        ? 'workspace'
-        : 'prompts';
-
-      const normalizedAccent = normalizeHex(accentColor);
-      const payload: BackupPayload =
-        selectedScope === 'workspace'
-          ? {
-              kind: 'promptvault-backup',
-              version: 2,
-              scope: 'workspace',
-              exportedAt: Date.now(),
-              data: {
-                categories,
-                prompts,
-                settings: {
-                  themeMode,
-                  accentColor: normalizedAccent,
-                  customModels: getCustomModels(),
-                },
-              },
-            }
-          : {
-              kind: 'promptvault-backup',
-              version: 2,
-              scope: 'prompts',
-              exportedAt: Date.now(),
-              data: {
-                prompts,
-              },
-            };
-
-      if (window.api && window.api.exportBackup) {
-        const success = await window.api.exportBackup(payload, selectedScope);
-        if (success) {
-          triggerNotification(
-            selectedScope === 'workspace'
-              ? 'Workspace backup exported successfully.'
-              : 'Prompts backup exported successfully.'
-          );
-        }
-      } else {
-        // Fallback file download for web browser previews
-        const dataStr =
-          'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute(
-          'download',
-          selectedScope === 'workspace'
-            ? 'promptvault_workspace_backup_web.json'
-            : 'promptvault_prompts_backup_web.json'
-        );
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
-        triggerNotification(
-          selectedScope === 'workspace'
-            ? 'Workspace backup downloaded.'
-            : 'Prompts backup downloaded.'
-        );
-      }
-    } catch (e) {
-      console.error('Export failed:', e);
-      triggerNotification('Failed to export backup.', 'error');
-    }
+    setBackupDialog({
+      mode: 'export',
+      available: { prompts: true, theme: true },
+      selected: { prompts: true, theme: true },
+    });
   };
 
   const persistDatabase = async (nextData: DatabaseData) => {
@@ -661,78 +602,180 @@ function App() {
     saveCustomModels(merged);
   };
 
-  const applyParsedImport = async (parsed: { scope: BackupScope; prompts: Prompt[]; categories?: Category[]; settings?: WorkspaceBackupPayload['data']['settings'] }) => {
-    if (parsed.scope === 'workspace') {
-      const applyWorkspace = confirm(
-        'Detected a WORKSPACE backup.\n\nOK = Add workspace prompts/categories and apply theme + AI model settings\nCancel = Import prompts only'
-      );
+  const buildBackupPayload = (selection: BackupSelection): BackupPayload => {
+    const payload: BackupPayload = {
+      kind: 'promptvault-backup',
+      version: 3,
+      data: {},
+    };
 
-      if (applyWorkspace) {
-        const nextPrompts = mergePromptsByIdAndVersion(prompts, parsed.prompts);
-        const nextCategories = parsed.categories ? mergeCategoriesWithoutOverwriting(categories, parsed.categories) : categories;
-        await persistDatabase({ prompts: nextPrompts, categories: nextCategories });
+    if (selection.prompts) {
+      payload.data.prompts = {
+        prompts,
+        categories,
+      };
+    }
 
-        if (parsed.settings) {
-          if (parsed.settings.themeMode === 'light' || parsed.settings.themeMode === 'dark') {
-            setThemeMode(parsed.settings.themeMode);
-          }
-          if (typeof parsed.settings.accentColor === 'string') {
-            setAccentColor(normalizeHex(parsed.settings.accentColor));
-          }
-        }
+    if (selection.theme) {
+      payload.data.theme = {
+        themeMode,
+        accentColor: normalizeHex(accentColor),
+        customModels: getCustomModels(),
+      };
+    }
 
-        syncModelsFromPrompts(parsed.prompts, parsed.settings?.customModels);
-        triggerNotification('Workspace backup imported and settings applied.');
-        return;
+    return payload;
+  };
+
+  const performImport = async (parsed: ParsedBackupPayload, selection: BackupSelection) => {
+    const hasPrompts = selection.prompts && parsed.prompts;
+    const hasTheme = selection.theme && parsed.theme;
+
+    if (hasPrompts && parsed.prompts) {
+      const nextPrompts = mergePromptsByIdAndVersion(prompts, parsed.prompts.prompts);
+      const nextCategories = mergeCategoriesWithoutOverwriting(categories, parsed.prompts.categories);
+      await persistDatabase({ prompts: nextPrompts, categories: nextCategories });
+      syncModelsFromPrompts(parsed.prompts.prompts, parsed.theme?.customModels);
+    }
+
+    if (hasTheme && parsed.theme) {
+      setThemeMode(parsed.theme.themeMode);
+      setAccentColor(normalizeHex(parsed.theme.accentColor));
+      saveCustomModels(parsed.theme.customModels);
+      if (!hasPrompts) {
+        syncModelsFromPrompts([], parsed.theme.customModels);
       }
     }
 
-    const mergedPrompts = mergePromptsByIdAndVersion(prompts, parsed.prompts);
-    await persistDatabase({ prompts: mergedPrompts, categories });
-    syncModelsFromPrompts(parsed.prompts);
-    triggerNotification('Prompts imported successfully.');
+    if (hasPrompts && hasTheme) {
+      triggerNotification('Workspace backup imported and settings applied.');
+      return;
+    }
+
+    if (hasTheme) {
+      triggerNotification('Theme backup imported successfully.');
+      return;
+    }
+
+    if (hasPrompts) {
+      triggerNotification('Prompts backup imported successfully.');
+    }
+  };
+
+  const handleConfirmBackupDialog = async () => {
+    if (!backupDialog) {
+      return;
+    }
+
+    try {
+      const payload = buildBackupPayload(backupDialog.selected);
+
+      if (backupDialog.mode === 'export') {
+        if (!backupDialog.selected.prompts && !backupDialog.selected.theme) {
+          triggerNotification('Select at least one backup section.', 'info');
+          return;
+        }
+
+        let completed = false;
+
+        if (window.api && window.api.exportBackup) {
+          const success = await window.api.exportBackup(payload);
+          if (success) {
+            triggerNotification('Backup exported successfully.');
+            completed = true;
+          }
+        } else {
+          const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
+          const downloadAnchor = document.createElement('a');
+          downloadAnchor.setAttribute('href', dataStr);
+          downloadAnchor.setAttribute('download', 'promptvault_backup_web.json');
+          document.body.appendChild(downloadAnchor);
+          downloadAnchor.click();
+          downloadAnchor.remove();
+          triggerNotification('Backup downloaded.');
+          completed = true;
+        }
+
+        if (completed) {
+          setBackupDialog(null);
+        }
+        return;
+      }
+
+      if (!backupDialog.selected.prompts && !backupDialog.selected.theme) {
+        triggerNotification('Select at least one section to import.', 'info');
+        return;
+      }
+
+      if (!backupDialog.parsedPayload) {
+        triggerNotification('No backup file selected.', 'error');
+        return;
+      }
+
+      await performImport(backupDialog.parsedPayload, backupDialog.selected);
+      setBackupDialog(null);
+    } catch (e) {
+      console.error('Backup flow failed:', e);
+      triggerNotification('Failed to complete backup action.', 'error');
+    }
+  };
+
+  const openImportDialog = (parsed: ParsedBackupPayload) => {
+    const available = {
+      prompts: Boolean(parsed.prompts),
+      theme: Boolean(parsed.theme),
+    };
+
+    setBackupDialog({
+      mode: 'import',
+      available,
+      selected: { ...available },
+      parsedPayload: parsed,
+    });
   };
 
   const handleImportBackup = async () => {
     try {
       if (window.api && window.api.importBackup) {
         const importedRaw = await window.api.importBackup();
-        if (importedRaw) {
-          const parsed = parseBackupPayload(importedRaw);
-          if (!parsed) {
-            triggerNotification('Invalid backup format.', 'error');
-            return;
-          }
-          await applyParsedImport(parsed);
-        } else {
+        if (!importedRaw) {
           triggerNotification('Import cancelled or failed.', 'info');
+          return;
         }
-      } else {
-        // Simple file select prompt fallback for Web
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
-        input.onchange = e => {
-          const file = (e.target as HTMLInputElement).files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = async event => {
-            try {
-              const importedData = JSON.parse(event.target?.result as string);
-              const parsed = parseBackupPayload(importedData);
-              if (!parsed) {
-                triggerNotification('Invalid JSON backup format.', 'error');
-                return;
-              }
-              await applyParsedImport(parsed);
-            } catch (err) {
-              triggerNotification('Failed to parse JSON file.', 'error');
-            }
-          };
-          reader.readAsText(file);
-        };
-        input.click();
+
+        const parsed = parseBackupPayload(JSON.parse(importedRaw));
+        if (!parsed) {
+          triggerNotification('Unsupported backup file.', 'error');
+          return;
+        }
+
+        openImportDialog(parsed);
+        return;
       }
+
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = e => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async event => {
+          try {
+            const importedData = JSON.parse(event.target?.result as string);
+            const parsed = parseBackupPayload(importedData);
+            if (!parsed) {
+              triggerNotification('Unsupported backup file.', 'error');
+              return;
+            }
+            openImportDialog(parsed);
+          } catch {
+            triggerNotification('Failed to parse JSON file.', 'error');
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
     } catch (e) {
       console.error('Import failed:', e);
       triggerNotification('Failed to import backup.', 'error');
@@ -935,6 +978,32 @@ function App() {
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
         />
+
+        {backupDialog && (
+          <BackupDialog
+            isOpen={Boolean(backupDialog)}
+            mode={backupDialog.mode}
+            available={backupDialog.available}
+            selected={backupDialog.selected}
+            onToggle={(option) => {
+              setBackupDialog(prev => {
+                if (!prev || !prev.available[option]) {
+                  return prev;
+                }
+
+                const nextSelected = { ...prev.selected, [option]: !prev.selected[option] };
+                if (!nextSelected.prompts && !nextSelected.theme) {
+                  return prev;
+                }
+
+                return { ...prev, selected: nextSelected };
+              });
+            }}
+            onClose={() => setBackupDialog(null)}
+            onConfirm={handleConfirmBackupDialog}
+            confirmDisabled={!backupDialog.selected.prompts && !backupDialog.selected.theme}
+          />
+        )}
 
         {/* Action Copy/Save Toast Notification Banner */}
         {notification && (

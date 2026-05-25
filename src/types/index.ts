@@ -45,8 +45,8 @@ export interface IElectronAPI {
   saveCategory: (category: Partial<Category> & { name: string }) => Promise<DatabaseData>;
   deleteCategory: (categoryId: string) => Promise<DatabaseData>;
   setAllData: (data: DatabaseData) => void;
-  exportBackup: (backupPayload: unknown, scope: 'workspace' | 'prompts') => Promise<boolean>;
-  importBackup: () => Promise<unknown | false>;
+  exportBackup: (backupPayload: unknown) => Promise<boolean>;
+  importBackup: () => Promise<string | false>;
 }
 
 declare global {

@@ -16,6 +16,6 @@ contextBridge.exposeInMainWorld('api', {
   setAllData: (data) => ipcRenderer.send('db-set-all', data),
   
   // Backup / Import API
-  exportBackup: (backupPayload, scope) => ipcRenderer.invoke('db-export-backup', backupPayload, scope),
+  exportBackup: (backupPayload) => ipcRenderer.invoke('db-export-backup', backupPayload),
   importBackup: () => ipcRenderer.invoke('db-import-backup'),
 });

@@ -112,6 +112,16 @@ function writeDatabase(data) {
   }
 }
 
+function getBackupFileName(backupPayload) {
+  const hasPrompts = Boolean(backupPayload?.data?.prompts);
+  const hasTheme = Boolean(backupPayload?.data?.theme);
+
+  if (hasPrompts && hasTheme) return 'promptvault_workspace_backup.json';
+  if (hasTheme) return 'promptvault_theme_backup.json';
+  if (hasPrompts) return 'promptvault_prompts_backup.json';
+  return 'promptvault_backup.json';
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1240,
@@ -258,12 +268,14 @@ ipcMain.handle('db-increment-usage', (event, promptId) => {
 ipcMain.handle('db-save-category', (event, category) => {
   const db = readDatabase();
   const index = db.categories.findIndex(c => c.id === category.id);
+  const sanitizedName = typeof category.name === 'string' ? category.name.trim().slice(0, 30) : '';
   
   if (index !== -1) {
-    db.categories[index] = { ...db.categories[index], ...category };
+    db.categories[index] = { ...db.categories[index], ...category, name: sanitizedName || db.categories[index].name };
   } else {
     const newCategory = {
       ...category,
+      name: sanitizedName,
       id: category.id || 'c_' + Math.random().toString(36).substr(2, 9),
     };
     db.categories.push(newCategory);
@@ -300,11 +312,10 @@ ipcMain.on('db-set-all', (event, data) => {
 // ==========================================
 // IPC HANDLERS - EXPORT / IMPORT BACKUPS
 // ==========================================
-ipcMain.handle('db-export-backup', async (event, backupPayload, scope = 'workspace') => {
+ipcMain.handle('db-export-backup', async (event, backupPayload) => {
   if (!mainWindow) return false;
 
-  const defaultFileName =
-    scope === 'prompts' ? 'promptvault_prompts_backup.json' : 'promptvault_workspace_backup.json';
+  const defaultFileName = getBackupFileName(backupPayload);
   
   const { filePath } = await dialog.showSaveDialog(mainWindow, {
     title: 'Export PromptVault Backup',
@@ -339,9 +350,7 @@ ipcMain.handle('db-import-backup', async () => {
   
   try {
     const backupStr = fs.readFileSync(filePaths[0], 'utf-8');
-    const backupData = JSON.parse(backupStr);
-
-    return backupData;
+    return backupStr;
   } catch (e) {
     console.error('Import failed:', e);
     return false;

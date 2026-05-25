@@ -37,8 +37,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCatName.trim()) return;
-    onAddCategory(newCatName.trim(), newCatIcon, newCatColor);
+    const trimmedName = newCatName.trim().slice(0, 30);
+    if (!trimmedName) return;
+    onAddCategory(trimmedName, newCatIcon, newCatColor);
     setNewCatName('');
     setShowAddForm(false);
   };
@@ -149,6 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 placeholder="Category Name..."
                 value={newCatName}
                 onChange={e => setNewCatName(e.target.value)}
+                maxLength={30}
                 className="w-full bg-obsidian-950 border border-obsidian-800 rounded px-2 py-1 text-xs focus-glow-violet"
                 autoFocus
               />
