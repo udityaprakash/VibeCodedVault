@@ -25,6 +25,25 @@ try {
 const isDev = !app.isPackaged;
 let mainWindow;
 let updateCheckInFlight = null;
+let downloadedInstallerPath = null;
+
+function cleanupOldInstallers() {
+  try {
+    const tempDir = os.tmpdir();
+    const files = fs.readdirSync(tempDir);
+    for (const file of files) {
+      if (file.startsWith('PromptVault-Setup-') && file.endsWith('.exe')) {
+        try {
+          fs.unlinkSync(path.join(tempDir, file));
+        } catch (e) {
+          // ignore files that are currently locked
+        }
+      }
+    }
+  } catch (err) {
+    if (log && log.error) log.error('Failed to cleanup old installers:', err);
+  }
+}
 
 const GITHUB_OWNER = 'udityaprakash';
 const GITHUB_REPO = 'VibeCodedVault';
@@ -395,7 +414,6 @@ function launchInstaller(installerPath) {
         const child = spawn(installerPath, [], {
           detached: true,
           stdio: 'ignore',
-          windowsHide: true,
         });
         child.unref();
         return true;
@@ -463,6 +481,7 @@ function createWindow() {
 
 // Ensure database exists
 app.whenReady().then(() => {
+  cleanupOldInstallers();
   initDatabase();
   createWindow();
 
@@ -694,7 +713,7 @@ ipcMain.handle('app-update-now', async () => {
       return { success: true, launchedInstaller: false, message: 'Downloading update...' };
     }
 
-    // Fallback: previous behavior (download file and launch)
+    // Fallback: download file and save reference, launch later on app-install-update
     const releaseInfo = await checkLatestRelease();
 
     if (!releaseInfo) {
@@ -711,54 +730,48 @@ ipcMain.handle('app-update-now', async () => {
       };
     }
 
-    const installerName = releaseInfo.assetName || `PromptVault-Setup-${releaseInfo.latestVersion}.exe`;
+    const installerName = `PromptVault-Setup-${releaseInfo.latestVersion}-${Date.now()}.exe`;
     const installerPath = path.join(os.tmpdir(), installerName);
+    
     // Notify renderer that download is starting
-    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-download-progress', { percent: 0, transferred: 0, total: 0 });
-    await downloadToFile(releaseInfo.assetUrl, installerPath);
-    // notify renderer that download completed
     if (mainWindow && mainWindow.webContents) {
-      mainWindow.webContents.send('update-download-progress', { percent: 100, transferred: 0, total: 0 });
-      mainWindow.webContents.send('update-downloaded', { version: releaseInfo.latestVersion, path: installerPath });
+      mainWindow.webContents.send('update-download-progress', { percent: 0, transferred: 0, total: 0 });
     }
-    // Notify renderer that installer launch is starting
+    
     try {
-      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-started', { installerPath });
-      await launchInstaller(installerPath);
-      app.quit();
-    } catch (err) {
-      log.error && log.error('launchInstaller failed:', err);
-      try {
-        const payload = `Timestamp: ${new Date().toISOString()}\nError: ${String(err)}\nStack: ${err && err.stack ? err.stack : 'n/a'}\n`;
-        fs.writeFileSync(installErrorLogPath, payload, 'utf-8');
-      } catch (writeErr) {
-        log.error && log.error('Failed to write install error log:', writeErr);
+      await downloadToFile(releaseInfo.assetUrl, installerPath);
+      downloadedInstallerPath = installerPath;
+      
+      // notify renderer that download completed
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('update-download-progress', { percent: 100, transferred: 0, total: 0 });
+        mainWindow.webContents.send('update-downloaded', { version: releaseInfo.latestVersion, path: installerPath });
       }
-      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-error', String(err));
+    } catch (err) {
+      log.error && log.error('downloadToFile failed:', err);
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('update-error', String(err));
+      }
       return {
         success: false,
-        message: 'Failed to launch installer.',
+        message: 'Failed to download the update package.',
       };
     }
 
     return {
       success: true,
-      launchedInstaller: true,
-      message: 'Update installer launched.',
+      launchedInstaller: false,
+      message: 'Update downloaded and ready to install.',
       releaseUrl: releaseInfo.releaseUrl,
     };
   } catch (error) {
-    log.error && log.error('Update launch failed:', error);
-    try {
-      const payload = `Timestamp: ${new Date().toISOString()}\nError: ${String(error)}\nStack: ${error && error.stack ? error.stack : 'n/a'}\n`;
-      fs.writeFileSync(installErrorLogPath, payload, 'utf-8');
-    } catch (writeErr) {
-      log.error && log.error('Failed to write install error log:', writeErr);
+    log.error && log.error('Update flow failed:', error);
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('update-error', String(error));
     }
-    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-error', String(error));
     return {
       success: false,
-      message: 'Unable to launch the update right now.',
+      message: 'Unable to start update download.',
     };
   }
 });
@@ -794,18 +807,47 @@ if (autoUpdater) {
 // Renderer can request install after user confirmation
 ipcMain.handle('app-install-update', async () => {
   try {
-    if (!autoUpdater) {
-      return { success: false, message: 'Auto updater not available in this build.' };
+    if (autoUpdater) {
+      // Notify renderer that install is starting
+      try {
+        if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-started', {});
+        // This will quit and install the downloaded update
+        autoUpdater.quitAndInstall(false, true);
+        return { success: true };
+      } catch (err) {
+        log.error && log.error('quitAndInstall failed:', err);
+        try {
+          const payload = `Timestamp: ${new Date().toISOString()}\nError: ${String(err)}\nStack: ${err && err.stack ? err.stack : 'n/a'}\n`;
+          fs.writeFileSync(installErrorLogPath, payload, 'utf-8');
+        } catch (writeErr) {
+          log.error && log.error('Failed to write install error log:', writeErr);
+        }
+        if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-error', String(err));
+        return { success: false, message: String(err) };
+      }
     }
 
-    // Notify renderer that install is starting
+    // Fallback: spawn the downloaded installer file and close the application
+    if (!downloadedInstallerPath || !fs.existsSync(downloadedInstallerPath)) {
+      const errMessage = 'No update package has been downloaded or the file is missing.';
+      log.error && log.error(errMessage);
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-error', errMessage);
+      return { success: false, message: errMessage };
+    }
+
     try {
-      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-started', {});
-      // This will quit and install the downloaded update
-      autoUpdater.quitAndInstall(false, true);
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-started', { installerPath: downloadedInstallerPath });
+      
+      await launchInstaller(downloadedInstallerPath);
+      
+      // Let the installer spawn and begin initialization, then close PromptVault
+      setTimeout(() => {
+        app.quit();
+      }, 500);
+      
       return { success: true };
     } catch (err) {
-      log.error && log.error('quitAndInstall failed:', err);
+      log.error && log.error('launchInstaller failed:', err);
       try {
         const payload = `Timestamp: ${new Date().toISOString()}\nError: ${String(err)}\nStack: ${err && err.stack ? err.stack : 'n/a'}\n`;
         fs.writeFileSync(installErrorLogPath, payload, 'utf-8');
@@ -813,7 +855,10 @@ ipcMain.handle('app-install-update', async () => {
         log.error && log.error('Failed to write install error log:', writeErr);
       }
       if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('update-install-error', String(err));
-      return { success: false, message: String(err) };
+      return {
+        success: false,
+        message: 'Failed to launch installer.',
+      };
     }
   } catch (err) {
     log.error && log.error('install update failed:', err);
