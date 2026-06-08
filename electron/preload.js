@@ -18,4 +18,11 @@ contextBridge.exposeInMainWorld('api', {
   // Backup / Import API
   exportBackup: (backupPayload, scope) => ipcRenderer.invoke('db-export-backup', backupPayload, scope),
   importBackup: () => ipcRenderer.invoke('db-import-backup'),
+  // Reminders
+  onReminderFired: (cb) => ipcRenderer.on('reminder-fired', (_e, payload) => cb(payload)),
+  snoozeReminder: (promptId, switchId, minutes) => ipcRenderer.invoke('db-snooze-reminder', promptId, switchId, minutes),
+  permanentlyDeletePrompt: (promptId) => ipcRenderer.invoke('db-permanently-delete-prompt', promptId),
+  restorePrompt: (promptId) => ipcRenderer.invoke('db-restore-prompt', promptId),
+  getPendingReminders: () => ipcRenderer.invoke('db-get-pending-reminders'),
+  markReminderFired: (promptId, switchId) => ipcRenderer.invoke('db-mark-reminder-fired', promptId, switchId),
 });

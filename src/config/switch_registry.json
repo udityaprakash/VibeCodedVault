@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "switches": [
+    {
+      "id": "copyable_text",
+      "name": "Copyable Text",
+      "icon": "Copy",
+      "type": "object",
+      "defaultValue": {
+        "label": "Copyable Text",
+        "value": "",
+        "defaultCopy": true
+      },
+      "renderer": "CopyableTextSwitch",
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "id": "strike_through",
+      "name": "Strike Through",
+      "icon": "Strikethrough",
+      "type": "boolean",
+      "defaultValue": false,
+      "renderer": "BooleanSwitch"
+    },
+    {
+      "id": "done_checkbox",
+      "name": "Done Checkbox",
+      "icon": "CheckSquare",
+      "type": "object",
+      "defaultValue": {
+        "label": "Done",
+        "checked": false
+      },
+      "renderer": "DoneCheckboxSwitch"
+    },
+    {
+      "id": "text_area",
+      "name": "Text Area",
+      "icon": "Type",
+      "type": "object",
+      "defaultValue": {
+        "label": "Text Area",
+        "content": ""
+      },
+      "renderer": "TextAreaSwitch"
+    },
+    {
+      "id": "link",
+      "name": "Link",
+      "icon": "Link",
+      "type": "object",
+      "defaultValue": {
+        "label": "Link",
+        "url": ""
+      },
+      "renderer": "LinkSwitch"
+    },
+    {
+      "id": "color",
+      "name": "Tile Color",
+      "icon": "Palette",
+      "type": "object",
+      "defaultValue": {
+        "hex": "#8B5CF6",
+        "opacity": 1
+      },
+      "renderer": "ColorSwitch"
+    },
+    {
+      "id": "reminder",
+      "name": "Reminder",
+      "icon": "Bell",
+      "type": "object",
+      "defaultValue": {
+        "datetime": null,
+        "title": "",
+        "description": ""
+      },
+      "renderer": "ReminderSwitch"
+    },
+    {
+      "id": "scheduled_delete",
+      "name": "Scheduled Delete",
+      "icon": "Trash2",
+      "type": "object",
+      "defaultValue": {
+        "deleteDateTime": null
+      },
+      "renderer": "ScheduledDeleteSwitch"
+    },
+    {
+      "id": "note",
+      "name": "Calendar Note",
+      "icon": "StickyNote",
+      "type": "object",
+      "defaultValue": {
+        "noteText": ""
+      },
+      "renderer": "NoteSwitch"
+    }
+  ]
+}

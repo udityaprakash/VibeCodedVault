@@ -8,12 +8,13 @@ let mainWindow;
 // Define storage file paths in the standard AppData folder
 const userDataPath = app.getPath('userData');
 const dbFilePath = path.join(userDataPath, 'prompts_db.json');
+const repository = require('./repository')(dbFilePath);
 
 // Helper to seed initial high-quality prompts and categories
 function getSeedData() {
   return {
     categories: [
-      { id: '1', name: 'Coding', icon: 'Code', color: '#8B5CF6' },
+      { id: '1', name: 'Coding', icon: 'Code', color: '#8B5CF6', switchInstances: [ { switchId: 'tile_color', value: '#8B5CF6', enabled: true, scope: 'category', updatedAt: Date.now() } ] },
       { id: '2', name: 'Image Generation', icon: 'Image', color: '#06B6D4' },
       { id: '3', name: 'Marketing', icon: 'Megaphone', color: '#10B981' },
       { id: '4', name: 'Writing & Creative', icon: 'PenTool', color: '#F43F5E' },
@@ -36,6 +37,7 @@ function getSeedData() {
         ],
         createdAt: Date.now() - 86400000 * 2,
         updatedAt: Date.now() - 86400000 * 2,
+        switchInstances: [ { switchId: 'tile_color', value: '#7C3AED', enabled: true, scope: 'prompt', updatedAt: Date.now() - 86400000 * 2 } ],
         usageCount: 14
       },
       {
@@ -54,6 +56,7 @@ function getSeedData() {
         ],
         createdAt: Date.now() - 86400000,
         updatedAt: Date.now() - 86400000,
+        switchInstances: [],
         usageCount: 8
       },
       {
@@ -185,123 +188,25 @@ ipcMain.on('window-close', () => {
 // ==========================================
 // IPC HANDLERS - DATABASE PERSISTENCE
 // ==========================================
-ipcMain.handle('db-get-all', () => {
-  return readDatabase();
-});
+ipcMain.handle('db-get-all', () => repository.getAllData());
 
-ipcMain.handle('db-save-prompt', (event, prompt) => {
-  const db = readDatabase();
-  const index = db.prompts.findIndex(p => p.id === prompt.id);
-  
-  const now = Date.now();
-  if (index !== -1) {
-    // Update existing prompt
-    const existing = db.prompts[index];
-    const prevContent = existing.content;
-    
-    // Manage version history if content changed
-    let updatedVersions = [...(existing.versions || [])];
-    let newVersion = existing.version || 1;
-    
-    if (prevContent !== prompt.content) {
-      newVersion += 1;
-      updatedVersions.push({
-        id: `${prompt.id || existing.id}-v${newVersion}-${now}`,
-        version: newVersion,
-        timestamp: now,
-        content: prompt.content
-      });
-    }
+ipcMain.handle('db-save-prompt', (event, prompt) => repository.savePrompt(prompt));
 
-    db.prompts[index] = {
-      ...existing,
-      ...prompt,
-      version: newVersion,
-      versions: updatedVersions,
-      updatedAt: now
-    };
-  } else {
-    // Create new prompt
-    const newPrompt = {
-      ...prompt,
-      id: prompt.id || 'p_' + Math.random().toString(36).substr(2, 9),
-      version: 1,
-      versions: [
-        { id: `${prompt.id || 'p'}-v1-${now}`, version: 1, timestamp: now, content: prompt.content }
-      ],
-      createdAt: now,
-      updatedAt: now,
-      usageCount: 0,
-      isPinned: prompt.isPinned || false,
-      isFavorite: prompt.isFavorite || false
-    };
-    db.prompts.push(newPrompt);
-  }
-  
-  writeDatabase(db);
-  return readDatabase();
-});
+ipcMain.handle('db-delete-prompt', (event, promptId) => repository.deletePrompt(promptId));
 
-ipcMain.handle('db-delete-prompt', (event, promptId) => {
-  const db = readDatabase();
-  db.prompts = db.prompts.filter(p => p.id !== promptId);
-  writeDatabase(db);
-  return readDatabase();
-});
+ipcMain.handle('db-increment-usage', (event, promptId) => repository.incrementUsage(promptId));
 
-ipcMain.handle('db-increment-usage', (event, promptId) => {
-  const db = readDatabase();
-  const index = db.prompts.findIndex(p => p.id === promptId);
-  if (index !== -1) {
-    db.prompts[index].usageCount = (db.prompts[index].usageCount || 0) + 1;
-    writeDatabase(db);
-  }
-  return readDatabase();
-});
+ipcMain.handle('db-save-category', (event, category) => repository.saveCategory(category));
 
-ipcMain.handle('db-save-category', (event, category) => {
-  const db = readDatabase();
-  const index = db.categories.findIndex(c => c.id === category.id);
-  
-  if (index !== -1) {
-    db.categories[index] = { ...db.categories[index], ...category };
-  } else {
-    const newCategory = {
-      ...category,
-      id: category.id || 'c_' + Math.random().toString(36).substr(2, 9),
-    };
-    db.categories.push(newCategory);
-  }
-  
-  writeDatabase(db);
-  return readDatabase();
-});
+ipcMain.handle('db-delete-category', (event, categoryId) => repository.deleteCategory(categoryId));
 
-ipcMain.handle('db-delete-category', (event, categoryId) => {
-  const db = readDatabase();
-  // Filter out the category
-  db.categories = db.categories.filter(c => c.id !== categoryId);
-  // Re-categorize items in this deleted category to general or uncategorized (null)
-  db.prompts = db.prompts.map(p => {
-    if (p.categoryId === categoryId) {
-      return { ...p, categoryId: null };
-    }
-    return p;
-  });
-  writeDatabase(db);
-  return readDatabase();
-});
+ipcMain.handle('db-permanently-delete-prompt', (event, promptId) => repository.permanentlyDeletePrompt(promptId));
+ipcMain.handle('db-restore-prompt', (event, promptId) => repository.restorePrompt(promptId));
+ipcMain.handle('db-snooze-reminder', (event, promptId, switchId, minutes) => repository.snoozeReminder(promptId, switchId, minutes));
+ipcMain.handle('db-get-pending-reminders', () => repository.getPendingReminders());
+ipcMain.handle('db-mark-reminder-fired', (event, promptId, switchId) => repository.markReminderFired(promptId, switchId));
 
-ipcMain.on('db-set-all', (event, data) => {
-  if (!data || !Array.isArray(data.categories) || !Array.isArray(data.prompts)) {
-    return;
-  }
-
-  writeDatabase({
-    categories: data.categories,
-    prompts: data.prompts,
-  });
-});
+ipcMain.on('db-set-all', (event, data) => repository.setAllData(data));
 
 // ==========================================
 // IPC HANDLERS - EXPORT / IMPORT BACKUPS
@@ -347,9 +252,37 @@ ipcMain.handle('db-import-backup', async () => {
     const backupStr = fs.readFileSync(filePaths[0], 'utf-8');
     const backupData = JSON.parse(backupStr);
 
-    return backupData;
+    // Basic validation for expected backup envelope
+    if (backupData && backupData.kind && backupData.kind.indexOf('promptvault') === 0) {
+      return { valid: true, payload: backupData };
+    }
+
+    return { valid: false, error: 'Unrecognized backup format' };
   } catch (e) {
     console.error('Import failed:', e);
     return false;
   }
 });
+
+// Reminder scheduler - checks every minute for pending reminders
+setInterval(() => {
+  try {
+    if (!mainWindow) return;
+    const pending = repository.getPendingReminders();
+    pending.forEach(rem => {
+      try {
+        const notif = new Notification({ title: rem.title || 'Reminder', body: rem.description || '' });
+        notif.show && notif.show();
+      } catch (e) {
+        // some electron versions support new Notification differently
+        try { new Notification(rem.title || 'Reminder'); } catch {}
+      }
+      // mark fired so we don't re-notify
+      repository.markReminderFired(rem.promptId, rem.switchId);
+      // notify renderer
+      try { mainWindow.webContents.send('reminder-fired', rem); } catch (e) {}
+    });
+  } catch (e) {
+    console.error('Reminder scheduler error:', e);
+  }
+}, 60 * 1000);

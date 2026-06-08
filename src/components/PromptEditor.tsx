@@ -4,6 +4,15 @@ import {
   Layers, Pin, Star, Info, Settings, Eye, Edit, Trash2
 } from 'lucide-react';
 import type { Prompt, Category } from '../types';
+import type { SwitchInstance } from '../core/models/switch';
+import ColorSwitch from './switches/ColorSwitch';
+import NoteSwitch from './switches/NoteSwitch';
+import CopyableTextSwitch from './switches/CopyableTextSwitch';
+import BooleanSwitch from './switches/BooleanSwitch';
+import ReminderSwitch from './switches/ReminderSwitch';
+import { SwitchRegistryLoader } from '../core/services/switchRegistryLoader';
+import { SwitchResolver } from '../core/services/switchResolver';
+import { PromptActionService } from '../core/services/promptActionService';
 import {
   CUSTOM_MODELS_UPDATED_EVENT,
   PRESET_MODELS,
@@ -30,6 +39,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   onSave,
   onDelete
 }) => {
+  const promptActionService = new PromptActionService();
   // Main form states
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -49,6 +59,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   // Variables / Template placeholders states
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [copiedCompiled, setCopiedCompiled] = useState(false);
+  const [switchDefs, setSwitchDefs] = useState<any[] | null>(null);
+  const [promptSwitchInstances, setPromptSwitchInstances] = useState<SwitchInstance[]>([]);
+  const [switchResolver, setSwitchResolver] = useState<SwitchResolver | null>(null);
   
   // AI Polish states
   const [polishing, setPolishing] = useState(false);
@@ -89,6 +102,43 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
   // Load prompt data on select/change
   useEffect(() => {
+    let mounted = true;
+    const loadRegistryAndInit = async () => {
+      try {
+        const loader = new SwitchRegistryLoader(new URL('../config/switch_registry.json', import.meta.url));
+        const registry = await loader.load();
+        if (!mounted) return;
+        setSwitchDefs(registry.switches || []);
+        const resolver = new SwitchResolver(registry.switches || []);
+        setSwitchResolver(resolver);
+
+        if (prompt) {
+          // initialize prompt switch instances from prompt or default prompt-level instances
+          const existing = (prompt as unknown as { switchInstances?: SwitchInstance[] }).switchInstances;
+          if (Array.isArray(existing) && existing.length > 0) {
+            setPromptSwitchInstances(existing);
+          } else {
+            setPromptSwitchInstances(resolver.buildDefaults('prompt'));
+          }
+        } else {
+          setPromptSwitchInstances(resolver.buildDefaults('prompt'));
+        }
+      } catch (e) {
+        console.warn('Failed to load switch registry in PromptEditor', e);
+        if (prompt) {
+          const existing = (prompt as unknown as { switchInstances?: SwitchInstance[] }).switchInstances || [];
+          setPromptSwitchInstances(existing);
+        }
+      }
+    };
+
+    void loadRegistryAndInit();
+
+    return () => { mounted = false; };
+  }, [prompt, categories]);
+
+  useEffect(() => {
+    // Keep UI in sync when selected prompt changes
     if (prompt) {
       setTitle(prompt.title);
       setDescription(prompt.description || '');
@@ -100,7 +150,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setTagsInput(prompt.tags ? prompt.tags.join(', ') : '');
       setIsPinned(prompt.isPinned || false);
       setIsFavorite(prompt.isFavorite || false);
-      
+
       // Parse initial placeholders
       const vars = extractPlaceholders(prompt.content);
       const initialVars: Record<string, string> = {};
@@ -196,14 +246,12 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
   const handleCopyCompiled = () => {
     const compiledText = getCompiledContent();
-    navigator.clipboard.writeText(compiledText);
-    setCopiedCompiled(true);
-    
-    if (prompt && window.api && window.api.incrementUsage) {
-      window.api.incrementUsage(prompt.id);
-    }
-    
-    setTimeout(() => setCopiedCompiled(false), 2000);
+    void promptActionService.copyPromptContent(compiledText, prompt?.id).then(success => {
+      if (success) {
+        setCopiedCompiled(true);
+        setTimeout(() => setCopiedCompiled(false), 2000);
+      }
+    });
   };
 
   // Simulated AI polisher that expands prompts elegantly
@@ -264,9 +312,22 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       categoryId,
       model: model.trim() || 'General',
       isPinned,
-      isFavorite
+      isFavorite,
+      switchInstances: promptSwitchInstances,
     });
   };
+
+  // Resolved switches combining category defaults and prompt overrides (for display)
+  const resolvedSwitches = (() => {
+    try {
+      if (!switchResolver) return [];
+      const cat = categories.find(c => c.id === categoryId) as unknown as { switchInstances?: SwitchInstance[] };
+      const categorySwitches = (cat && Array.isArray(cat.switchInstances)) ? cat.switchInstances : [];
+      return switchResolver.resolve(categorySwitches, promptSwitchInstances);
+    } catch {
+      return [];
+    }
+  })();
 
   const variableKeys = Object.keys(variables);
 
@@ -473,6 +534,32 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 </div>
               </div>
 
+              {/* Row 3.5: Read-only Switches Panel (prompt-level overrides) */}
+              {prompt?.switchInstances && prompt.switchInstances.length > 0 && (
+                <div className="glass-panel p-3 rounded-lg border border-obsidian-850">
+                  <h4 className="text-xs font-bold text-cyber-cyan uppercase tracking-wider mb-2">Switches (Prompt Overrides)</h4>
+                  <div className="flex flex-col gap-2">
+                    {prompt.switchInstances.map((si: SwitchInstance) => (
+                      <div key={`${si.switchId}-${si.updatedAt}`} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="text-[12px] font-medium text-obsidian-200">{si.switchId}</div>
+                          <div className="text-[11px] text-obsidian-400">{si.enabled ? 'Enabled' : 'Disabled'}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {si.switchId === 'color' || (si.value && typeof si.value === 'object' && (si.value as any).hex) ? (
+                            <ColorSwitch value={si.value} />
+                          ) : si.switchId === 'note' || (si.value && typeof si.value === 'object' && (si.value as any).noteText) ? (
+                            <NoteSwitch value={si.value} />
+                          ) : (
+                            <div className="text-[12px] text-obsidian-300 font-mono px-2 py-1 bg-obsidian-950/60 rounded">{typeof si.value === 'object' ? JSON.stringify(si.value) : String(si.value)}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Row 4: Prompt Content Canvas & AI Polish */}
               <div className="relative">
                 <div className="flex items-center justify-between mb-1">
@@ -506,6 +593,93 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet p-4 rounded-xl text-xs text-obsidian-300 font-mono leading-relaxed resize-y focus:outline-none"
                 />
               </div>
+
+              {/* Row 4.5: Editable Switch Instances */}
+              {switchDefs && (
+                <div className="glass-panel p-4 rounded-xl border border-obsidian-850">
+                  <h4 className="text-xs font-bold text-cyber-cyan uppercase tracking-wider mb-3">Switches (Prompt Overrides)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {switchDefs.map((def: any) => {
+                      const current = promptSwitchInstances.find(si => si.switchId === def.id);
+                      const enabled = Boolean(current && current.enabled);
+                      const value = current ? current.value : def.defaultValue;
+
+                      const setEnabledFor = (v: boolean) => {
+                        setPromptSwitchInstances(prev => {
+                          const exists = prev.find(si => si.switchId === def.id);
+                          if (exists) {
+                            return prev.map(si => si.switchId === def.id ? { ...si, enabled: v, updatedAt: Date.now() } : si);
+                          }
+                          return [...prev, { switchId: def.id, value: def.defaultValue, enabled: v, scope: 'prompt', updatedAt: Date.now() }];
+                        });
+                      };
+
+                      const setValueFor = (newVal: any) => {
+                        setPromptSwitchInstances(prev => {
+                          const exists = prev.find(si => si.switchId === def.id);
+                          if (exists) {
+                            return prev.map(si => si.switchId === def.id ? { ...si, value: newVal, updatedAt: Date.now() } : si);
+                          }
+                          return [...prev, { switchId: def.id, value: newVal, enabled: true, scope: 'prompt', updatedAt: Date.now() }];
+                        });
+                      };
+
+                      return (
+                        <div key={def.id} className="p-3 rounded-lg border border-obsidian-850 bg-obsidian-950/30">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-sm font-semibold text-obsidian-200">{def.name}</div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] text-obsidian-400">Enabled</label>
+                              <input type="checkbox" checked={enabled} onChange={e => setEnabledFor(e.target.checked)} />
+                              {/* Show resolved source if available */}
+                              {resolvedSwitches && resolvedSwitches.find(rs => rs.switchId === def.id) && (
+                                (() => {
+                                  const rs = resolvedSwitches.find(rs => rs.switchId === def.id)!;
+                                  return (
+                                    <span
+                                      title={rs.source === 'prompt' ? 'This value is defined on the prompt (override)' : 'This value is inherited from the category'}
+                                      role="status"
+                                      aria-label={rs.source === 'prompt' ? `${def.name} defined on prompt` : `${def.name} inherited from category`}
+                                      className={`ml-2 text-[11px] px-2 py-0.5 rounded ${rs.source === 'prompt' ? 'bg-cyber-violet text-white' : 'bg-cyber-cyan text-black'} hover:scale-105 transition-transform duration-150`}
+                                    >
+                                      <span className="sr-only">{def.name}:</span>
+                                      {rs.source === 'prompt' ? 'Prompt' : 'Category'}
+                                    </span>
+                                  );
+                                })()
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            {def.id === 'color' || def.renderer === 'ColorSwitch' ? (
+                              <ColorSwitch editable value={value} onChange={(v) => setValueFor(v)} />
+                            ) : def.id === 'note' || def.renderer === 'NoteSwitch' ? (
+                              <NoteSwitch value={value} />
+                            ) : def.id === 'copyable_text' || def.renderer === 'CopyableTextSwitch' ? (
+                              <CopyableTextSwitch editable value={value} onChange={(v) => setValueFor(v)} />
+                            ) : def.type === 'boolean' ? (
+                              <BooleanSwitch editable value={value} onChange={v => setValueFor(v)} />
+                            ) : def.id === 'reminder' || def.renderer === 'ReminderSwitch' ? (
+                              <ReminderSwitch value={value} />
+                            ) : (
+                              <input type="text" value={typeof value === 'object' ? JSON.stringify(value) : String(value || '')} onChange={e => {
+                                const raw = e.target.value;
+                                try {
+                                  const parsed = JSON.parse(raw);
+                                  setValueFor(parsed);
+                                } catch {
+                                  setValueFor(raw);
+                                }
+                              }} className="w-full bg-obsidian-950/80 border border-obsidian-850 px-2 py-1 rounded text-xs text-obsidian-300" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Row 5: Tags list */}
               <div>

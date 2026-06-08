@@ -5,6 +5,8 @@ export interface PromptVersion {
   content: string;
 }
 
+import type { SwitchInstance } from '../core/models/switch';
+
 export interface Prompt {
   id: string;
   title: string;
@@ -20,6 +22,8 @@ export interface Prompt {
   createdAt: number;
   updatedAt: number;
   usageCount: number;
+  // Optional runtime switch instances (prompt-level overrides)
+  switchInstances?: SwitchInstance[];
 }
 
 export interface Category {
@@ -27,6 +31,8 @@ export interface Category {
   name: string;
   icon: string;
   color: string;
+  // Optional category-level default switch instances
+  switchInstances?: SwitchInstance[];
 }
 
 export interface DatabaseData {

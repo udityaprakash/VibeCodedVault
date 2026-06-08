@@ -5,16 +5,21 @@ import { PromptGrid } from './components/PromptGrid';
 import { PromptEditor } from './components/PromptEditor';
 import { CommandPalette } from './components/CommandPalette';
 import { BackupDialog } from './components/BackupDialog';
+import { CategoryEditor } from './components/CategoryEditor';
 import type { Category, Prompt, DatabaseData, UpdateInfo } from './types';
 import { 
   Search, Terminal, Plus, Zap, Bookmark, AlertTriangle, Layers
 } from 'lucide-react';
 import { PRESET_MODELS, getCustomModels, saveCustomModels } from './utils/aiModels';
+import { SwitchRegistryLoader } from './core/services/switchRegistryLoader';
+import { PromptApplicationService } from './core/services/promptApplicationService';
+import ReminderPanel from './components/ReminderPanel';
 
 type ThemeMode = 'light' | 'dark';
 
 const THEME_STORAGE_KEY = 'promptvault-theme-preferences';
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const promptApplicationService = new PromptApplicationService();
 
 type BackupSelection = {
   prompts: boolean;
@@ -43,10 +48,10 @@ interface BackupPayloadV3 {
 
 type BackupPayload = BackupPayloadV3;
 
-interface ParsedBackupPayload {
+type ParsedBackupPayload = {
   prompts?: PromptsBackupSection;
   theme?: ThemeBackupSection;
-}
+};
 
 interface BackupModalState {
   mode: 'export' | 'import';
@@ -88,266 +93,17 @@ const adjustHex = (hex: string, amount: number) => {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 };
 
-const normalizeForSearch = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+const mergePromptsByIdAndVersion = (base: Prompt[], incoming: Prompt[]) =>
+  promptApplicationService.mergePromptsByIdAndVersion(base, incoming);
 
-const buildBigrams = (value: string) => {
-  const source = ` ${value} `;
-  const bigrams: string[] = [];
-  for (let index = 0; index < source.length - 1; index += 1) {
-    bigrams.push(source.slice(index, index + 2));
-  }
-  return bigrams;
-};
+const createPromptVersion = (promptId: string, version: number, timestamp: number, content: string) =>
+  promptApplicationService.createPromptVersion(promptId, version, timestamp, content);
 
-const getBigramSimilarity = (left: string, right: string) => {
-  if (!left || !right) {
-    return 0;
-  }
+const mergeCategoriesWithoutOverwriting = (base: Category[], incoming: Category[]) =>
+  promptApplicationService.mergeCategoriesWithoutOverwriting(base, incoming);
 
-  if (left === right) {
-    return 1;
-  }
-
-  const leftBigrams = buildBigrams(left);
-  const rightBigrams = buildBigrams(right);
-  if (!leftBigrams.length || !rightBigrams.length) {
-    return 0;
-  }
-
-  const rightCounts = new Map<string, number>();
-  rightBigrams.forEach(bigram => {
-    rightCounts.set(bigram, (rightCounts.get(bigram) || 0) + 1);
-  });
-
-  let intersection = 0;
-  leftBigrams.forEach(bigram => {
-    const count = rightCounts.get(bigram) || 0;
-    if (count > 0) {
-      intersection += 1;
-      rightCounts.set(bigram, count - 1);
-    }
-  });
-
-  return (2 * intersection) / (leftBigrams.length + rightBigrams.length);
-};
-
-const isCategoryNameMatch = (categoryName: string, query: string) => {
-  const normalizedCategory = normalizeForSearch(categoryName);
-  if (!normalizedCategory || !query) {
-    return false;
-  }
-
-  if (normalizedCategory.includes(query) || query.includes(normalizedCategory)) {
-    return true;
-  }
-
-  const queryTokens = query.split(' ').filter(token => token.length > 1);
-  const categoryTokens = normalizedCategory.split(' ').filter(token => token.length > 1);
-  const hasTokenMatch = queryTokens.some(queryToken =>
-    categoryTokens.some(categoryToken =>
-      categoryToken.includes(queryToken) || queryToken.includes(categoryToken)
-    )
-  );
-
-  if (hasTokenMatch) {
-    return true;
-  }
-
-  return getBigramSimilarity(normalizedCategory, query) >= 0.8;
-};
-
-const isPromptArray = (value: unknown): value is Prompt[] => Array.isArray(value);
-
-const isCategoryArray = (value: unknown): value is Category[] => Array.isArray(value);
-
-const isThemeMode = (value: unknown): value is ThemeMode => value === 'light' || value === 'dark';
-
-const getVersionKey = (version: Prompt['versions'][number]) =>
-  version.id || `${version.version}:${version.timestamp}:${version.content}`;
-
-const comparePromptVersions = (
-  left: Prompt['versions'][number] | undefined,
-  right: Prompt['versions'][number] | undefined
-) => {
-  if (!left && !right) return 0;
-  if (!left) return -1;
-  if (!right) return 1;
-  if (left.version !== right.version) {
-    return left.version - right.version;
-  }
-  return left.timestamp - right.timestamp;
-};
-
-const normalizePromptVersions = (prompt: Prompt): Prompt['versions'] => {
-  const versions = Array.isArray(prompt.versions) ? prompt.versions : [];
-  const seen = new Set<string>();
-
-  return versions
-    .map(version => ({
-      ...version,
-      id: version.id || `${prompt.id}-v${version.version}-${version.timestamp}`,
-    }))
-    .filter(version => {
-      const key = getVersionKey(version);
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
-};
-
-const mergePromptHistory = (existing: Prompt | undefined, incoming: Prompt): Prompt | null => {
-  const normalizedIncoming = {
-    ...incoming,
-    versions: normalizePromptVersions(incoming),
-  };
-
-  if (!existing) {
-    return normalizedIncoming;
-  }
-
-  const normalizedExisting = {
-    ...existing,
-    versions: normalizePromptVersions(existing),
-  };
-
-  const existingLatest = normalizedExisting.versions[normalizedExisting.versions.length - 1];
-  const incomingLatest = normalizedIncoming.versions[normalizedIncoming.versions.length - 1];
-  const incomingIsNewer = comparePromptVersions(incomingLatest, existingLatest) > 0;
-
-  if (existingLatest && incomingLatest && getVersionKey(existingLatest) === getVersionKey(incomingLatest)) {
-    return null;
-  }
-
-  const mergedVersions = [...normalizedExisting.versions];
-  const existingVersionKeys = new Set(mergedVersions.map(getVersionKey));
-
-  normalizedIncoming.versions.forEach(version => {
-    const key = getVersionKey(version);
-    if (!existingVersionKeys.has(key)) {
-      existingVersionKeys.add(key);
-      mergedVersions.push(version);
-    }
-  });
-
-  mergedVersions.sort((left, right) => {
-    if (left.version !== right.version) {
-      return left.version - right.version;
-    }
-    return left.timestamp - right.timestamp;
-  });
-
-  const latestVersion = mergedVersions[mergedVersions.length - 1];
-  const activeSource = incomingIsNewer ? normalizedIncoming : normalizedExisting;
-
-  return {
-    ...activeSource,
-    versions: mergedVersions,
-    version: latestVersion?.version ?? normalizedIncoming.version,
-    content: latestVersion?.content ?? normalizedIncoming.content,
-    updatedAt: Math.max(normalizedExisting.updatedAt, normalizedIncoming.updatedAt),
-    createdAt: Math.min(normalizedExisting.createdAt, normalizedIncoming.createdAt),
-    usageCount: Math.max(normalizedExisting.usageCount || 0, normalizedIncoming.usageCount || 0),
-  };
-};
-
-const mergePromptsByIdAndVersion = (base: Prompt[], incoming: Prompt[]) => {
-  const merged = [...base];
-  const byId = new Map(base.map(prompt => [prompt.id, prompt]));
-
-  incoming.forEach(prompt => {
-    const mergedPrompt = mergePromptHistory(byId.get(prompt.id), prompt);
-    if (mergedPrompt === null) {
-      return;
-    }
-
-    if (byId.has(prompt.id)) {
-      const index = merged.findIndex(item => item.id === prompt.id);
-      if (index !== -1) {
-        merged[index] = mergedPrompt;
-      }
-    } else {
-      merged.push(mergedPrompt);
-    }
-
-    byId.set(prompt.id, mergedPrompt);
-  });
-
-  return merged;
-};
-
-const createPromptVersion = (promptId: string, version: number, timestamp: number, content: string) => ({
-  id: `${promptId}-v${version}-${timestamp}`,
-  version,
-  timestamp,
-  content,
-});
-
-const mergeCategoriesWithoutOverwriting = (base: Category[], incoming: Category[]) => {
-  const existingIds = new Set(base.map(item => item.id));
-  const normalizedIncoming = incoming.map(item => {
-    if (!existingIds.has(item.id)) {
-      existingIds.add(item.id);
-      return item;
-    }
-
-    return item;
-  });
-
-  return [...base, ...normalizedIncoming.filter(item => !base.some(existing => existing.id === item.id))];
-};
-
-const parseBackupPayload = (raw: unknown): ParsedBackupPayload | null => {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-
-  const backup = raw as Record<string, unknown>;
-
-  if (backup.kind !== 'promptvault-backup' || backup.version !== 3) {
-    return null;
-  }
-
-  const data = backup.data as Record<string, unknown> | undefined;
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
-
-  const parsed: ParsedBackupPayload = {};
-
-  if (data.prompts && typeof data.prompts === 'object') {
-    const promptsSection = data.prompts as Record<string, unknown>;
-    if (!isPromptArray(promptsSection.prompts) || !isCategoryArray(promptsSection.categories)) {
-      return null;
-    }
-
-    parsed.prompts = {
-      prompts: promptsSection.prompts,
-      categories: promptsSection.categories,
-    };
-  }
-
-  if (data.theme && typeof data.theme === 'object') {
-    const themeSection = data.theme as Record<string, unknown>;
-    if (!isThemeMode(themeSection.themeMode) || typeof themeSection.accentColor !== 'string' || !Array.isArray(themeSection.customModels)) {
-      return null;
-    }
-
-    parsed.theme = {
-      themeMode: themeSection.themeMode,
-      accentColor: themeSection.accentColor,
-      customModels: themeSection.customModels.filter((item): item is string => typeof item === 'string'),
-    };
-  }
-
-  return parsed.prompts || parsed.theme ? parsed : null;
-};
+const parseBackupPayload = (raw: unknown): ParsedBackupPayload | null =>
+  promptApplicationService.parseBackupPayload(raw);
 
 // Robust local fallback seed data for browser/quick testing
 const FALLBACK_SEED: DatabaseData = {
@@ -429,11 +185,42 @@ function App() {
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [installLaunching, setInstallLaunching] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
+  const [switchRegistryVersion, setSwitchRegistryVersion] = useState<number | null>(null);
+  const [switchRegistryReady, setSwitchRegistryReady] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [showReminders, setShowReminders] = useState(false);
 
   // Load database on start
   useEffect(() => {
     loadDatabase();
   }, []);
+
+  useEffect(() => {
+    const loadSwitchRegistry = async () => {
+      try {
+        const loader = new SwitchRegistryLoader(new URL('./config/switch_registry.json', import.meta.url));
+        const registry = await loader.load();
+        setSwitchRegistryVersion(registry.version);
+        setSwitchRegistryReady(true);
+      } catch (error) {
+        console.warn('Switch registry unavailable, continuing with current prompt behavior:', error);
+        setSwitchRegistryVersion(null);
+        setSwitchRegistryReady(false);
+      }
+    };
+
+    void loadSwitchRegistry();
+  }, []);
+
+  useEffect(() => {
+    if (!editingCategoryId) {
+      setEditingCategory(null);
+      return;
+    }
+    const found = categories.find(c => c.id === editingCategoryId) || null;
+    setEditingCategory(found);
+  }, [editingCategoryId, categories]);
 
   useEffect(() => {
     const loadVersion = async () => {
@@ -830,6 +617,25 @@ function App() {
     });
   };
 
+  const handleSaveCategory = async (partial: Partial<Category> & { name: string }) => {
+    try {
+      if (window.api && window.api.saveCategory) {
+        const data = await window.api.saveCategory(partial as any);
+        setPrompts(data.prompts);
+        setCategories(data.categories);
+        triggerNotification(`Category "${partial.name}" saved.`);
+      } else {
+        setCategories(prev => prev.map(c => c.id === partial.id ? { ...c, ...(partial as any) } : c));
+        triggerNotification(`Category "${partial.name}" saved locally.`);
+      }
+      setEditingCategoryId(null);
+      setEditingCategory(null);
+    } catch (e) {
+      console.error('Save category failed:', e);
+      triggerNotification('Failed to save category.', 'error');
+    }
+  };
+
   const persistDatabase = async (nextData: DatabaseData) => {
     if (window.api && window.api.setAllData) {
       try {
@@ -1045,38 +851,11 @@ function App() {
   // SEARCH & FILTERING LOGIC
   // ==========================================
   const getFilteredPrompts = () => {
-    let result = [...prompts];
-
-    // 1. Filter by sidebar categories / special indicators
-    if (selectedCategoryId === 'favorites') {
-      result = result.filter(p => p.isFavorite);
-    } else if (selectedCategoryId === 'pinned') {
-      result = result.filter(p => p.isPinned);
-    } else if (selectedCategoryId !== null) {
-      result = result.filter(p => p.categoryId === selectedCategoryId);
-    }
-
-    // 2. Filter by Search Query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const normalizedQuery = normalizeForSearch(searchQuery);
-      const categoryNameById = new Map(categories.map(category => [category.id, category.name]));
-
-      result = result.filter(p => 
-        p.title.toLowerCase().includes(q) ||
-        (p.description && p.description.toLowerCase().includes(q)) ||
-        p.content.toLowerCase().includes(q) ||
-        p.tags.some(tag => tag.toLowerCase().includes(q)) ||
-        p.model.toLowerCase().includes(q) ||
-        (p.categoryId !== null && isCategoryNameMatch(categoryNameById.get(p.categoryId) || '', normalizedQuery))
-      );
-    }
-
-    // 3. Sort logic: Pinned prompts always stay at the top
-    return result.sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return b.updatedAt - a.updatedAt; // otherwise newest updated first
+    return promptApplicationService.getFilteredPrompts({
+      prompts,
+      categories,
+      selectedCategoryId,
+      searchQuery,
     });
   };
 
@@ -1096,7 +875,11 @@ function App() {
   const pinnedCount = prompts.filter(p => p.isPinned).length;
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-obsidian-950">
+    <div
+      className="flex flex-col h-screen w-screen overflow-hidden bg-obsidian-950"
+      data-switch-registry-ready={switchRegistryReady ? 'true' : 'false'}
+      data-switch-registry-version={switchRegistryVersion ?? ''}
+    >
       {/* Title Bar */}
       <TitleBar
         themeMode={themeMode}
@@ -1168,8 +951,10 @@ function App() {
           onSelectCategory={setSelectedCategoryId}
           onAddCategory={handleAddCategory}
           onDeleteCategory={handleDeleteCategory}
+          onEditCategory={(id: string) => setEditingCategoryId(id)}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+          onOpenReminders={() => setShowReminders(true)}
         />
 
         {/* Main Dashboard Space */}
@@ -1274,6 +1059,18 @@ function App() {
             onSave={handleSavePrompt}
             onDelete={handleDeletePrompt}
           />
+        )}
+
+        {editingCategory && (
+          <CategoryEditor
+            category={editingCategory}
+            onClose={() => { setEditingCategoryId(null); setEditingCategory(null); }}
+            onSave={handleSaveCategory}
+          />
+        )}
+
+        {showReminders && (
+          <ReminderPanel onClose={() => setShowReminders(false)} onOpenPrompt={(id) => handleSelectPrompt(id)} />
         )}
 
         {/* Floating Command Palette Overlay */}

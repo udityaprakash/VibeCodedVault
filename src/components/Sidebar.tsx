@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { RecycleBin } from './RecycleBin';
 import { 
   LayoutGrid, Star, Pin, Plus, Trash2, 
+  Edit,
   Download, Upload, ChevronLeft, ChevronRight,
-  Zap, Circle
+  Zap, Circle, Clock
 } from 'lucide-react';
 import type { Category } from '../types';
 import { CategoryIcon } from './CategoryIcon';
@@ -14,8 +16,10 @@ interface SidebarProps {
   onSelectCategory: (id: string | null) => void;
   onAddCategory: (name: string, icon: string, color: string) => void;
   onDeleteCategory: (id: string) => void;
+  onEditCategory: (catId: string) => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
+  onOpenReminders: () => void;
 }
 
 const PRESET_ICONS = ['Code', 'Image', 'Megaphone', 'PenTool', 'Zap', 'Target', 'FileText', 'MessageSquare', 'Layers', 'Smile'];
@@ -28,14 +32,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectCategory,
   onAddCategory,
   onDeleteCategory,
+  onEditCategory,
   onExportBackup,
   onImportBackup
+  , onOpenReminders
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('Zap');
   const [newCatColor, setNewCatColor] = useState('#8B5CF6');
+  const [showRecycleBin, setShowRecycleBin] = useState(false);
 
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,7 +242,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {!isCollapsed && <span className="truncate">{cat.name}</span>}
                   </button>
                   
-                  {/* Delete button (only show on hover, and if not collapsed) */}
+                  {/* Edit/Delete buttons (only show on hover, and if not collapsed) */}
+                  {!isCollapsed && (
+                    <button
+                      onClick={() => onEditCategory(cat.id)}
+                      className="opacity-0 group-hover:opacity-100 text-obsidian-600 hover:text-cyber-rose p-2 cursor-pointer transition-all duration-150"
+                      title="Edit Category"
+                    >
+                      <Edit size={12} />
+                    </button>
+                  )}
                   {!isCollapsed && (
                     <button
                       onClick={() => onDeleteCategory(cat.id)}
@@ -271,7 +287,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Download size={14} className="text-cyber-violet" />
           {!isCollapsed && <span>Export Database</span>}
         </button>
+        <button
+          onClick={() => onOpenReminders()}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 transition-all duration-150 cursor-pointer"
+          title="Recycle Bin"
+        >
+          <Clock size={14} className="text-cyber-cyan" />
+          {!isCollapsed && <span>Reminders</span>}
+        </button>
       </div>
+      {showRecycleBin && <RecycleBin onClose={() => setShowRecycleBin(false)} />}
     </aside>
   );
 };
