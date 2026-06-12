@@ -5,6 +5,13 @@ export interface PromptVersion {
   content: string;
 }
 
+export interface RawSwitchData {
+  id: string;
+  type: string;
+  label: string;
+  value: any;
+}
+
 export interface Prompt {
   id: string;
   title: string;
@@ -20,6 +27,8 @@ export interface Prompt {
   createdAt: number;
   updatedAt: number;
   usageCount: number;
+  switches?: RawSwitchData[];
+  deletedAt?: number;
 }
 
 export interface Category {
@@ -27,12 +36,15 @@ export interface Category {
   name: string;
   icon: string;
   color: string;
+  switches?: RawSwitchData[];
 }
 
 export interface DatabaseData {
   categories: Category[];
   prompts: Prompt[];
+  deletedPrompts?: Prompt[];
 }
+
 
 export interface UpdateInfo {
   currentVersion: string;
@@ -63,6 +75,9 @@ export interface IElectronAPI {
   incrementUsage: (promptId: string) => Promise<DatabaseData>;
   saveCategory: (category: Partial<Category> & { name: string }) => Promise<DatabaseData>;
   deleteCategory: (categoryId: string) => Promise<DatabaseData>;
+  restorePrompt: (promptId: string) => Promise<DatabaseData>;
+  deletePromptPermanently: (promptId: string) => Promise<DatabaseData>;
+  emptyTrash: () => Promise<DatabaseData>;
   setAllData: (data: DatabaseData) => void;
   exportBackup: (backupPayload: unknown) => Promise<boolean>;
   importBackup: () => Promise<string | false>;

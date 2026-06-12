@@ -2,24 +2,23 @@ import { useState } from 'react';
 import { 
   LayoutGrid, Star, Pin, Plus, Trash2, 
   Download, Upload, ChevronLeft, ChevronRight,
-  Zap, Circle
+  Zap, Trash
 } from 'lucide-react';
 import type { Category } from '../types';
 import { CategoryIcon } from './CategoryIcon';
+import { CategoryModal } from './CategoryModal';
 
 interface SidebarProps {
   appVersion: string;
   categories: Category[];
   selectedCategoryId: string | null; // 'all', 'favorites', 'pinned', or a category UUID
   onSelectCategory: (id: string | null) => void;
-  onAddCategory: (name: string, icon: string, color: string) => void;
+  onAddCategory: (category: Partial<Category> & { name: string }) => void;
   onDeleteCategory: (id: string) => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
+  onOpenRecycleBin: () => void;
 }
-
-const PRESET_ICONS = ['Code', 'Image', 'Megaphone', 'PenTool', 'Zap', 'Target', 'FileText', 'MessageSquare', 'Layers', 'Smile'];
-const PRESET_COLORS = ['#8B5CF6', '#06B6D4', '#10B981', '#F43F5E', '#F59E0B', '#EC4899', '#3B82F6', '#6366F1'];
 
 export const Sidebar: React.FC<SidebarProps> = ({
   appVersion,
@@ -29,22 +28,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAddCategory,
   onDeleteCategory,
   onExportBackup,
-  onImportBackup
+  onImportBackup,
+  onOpenRecycleBin
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatIcon, setNewCatIcon] = useState('Zap');
-  const [newCatColor, setNewCatColor] = useState('#8B5CF6');
-
-  const handleCreateCategory = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedName = newCatName.trim().slice(0, 30);
-    if (!trimmedName) return;
-    onAddCategory(trimmedName, newCatIcon, newCatColor);
-    setNewCatName('');
-    setShowAddForm(false);
-  };
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   return (
     <aside 
@@ -135,7 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {!isCollapsed && <h3 className="text-[11px] font-bold text-obsidian-400 uppercase tracking-widest">Categories</h3>}
             {!isCollapsed && (
               <button 
-                onClick={() => setShowAddForm(!showAddForm)}
+                onClick={() => setIsCategoryModalOpen(true)}
                 className="text-obsidian-400 hover:text-cyber-violet cursor-pointer transition-colors duration-150"
                 title="Create Category"
               >
@@ -143,74 +131,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
           </div>
-
-          {/* Add Category Form */}
-          {!isCollapsed && showAddForm && (
-            <form onSubmit={handleCreateCategory} className="glass-panel p-3 rounded-lg mb-3 space-y-3 border border-obsidian-800">
-              <input
-                type="text"
-                placeholder="Category Name..."
-                value={newCatName}
-                onChange={e => setNewCatName(e.target.value)}
-                maxLength={30}
-                className="w-full bg-obsidian-950 border border-obsidian-800 rounded px-2 py-1 text-xs focus-glow-violet"
-                autoFocus
-              />
-              
-              {/* Presets Grid */}
-              <div className="space-y-1">
-                <span className="text-[9px] text-obsidian-400 uppercase tracking-wider block">Select Icon</span>
-                <div className="grid grid-cols-5 gap-1">
-                  {PRESET_ICONS.map(ic => (
-                    <button
-                      key={ic}
-                      type="button"
-                      onClick={() => setNewCatIcon(ic)}
-                      className={`p-1.5 rounded flex justify-center items-center cursor-pointer transition-all hover:bg-obsidian-800 ${
-                        newCatIcon === ic ? 'bg-cyber-purple/40 border border-cyber-violet' : 'bg-obsidian-900 border border-transparent'
-                      }`}
-                    >
-                      <CategoryIcon name={ic} size={12} className="text-obsidian-300" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Colors Grid */}
-              <div className="space-y-1">
-                <span className="text-[9px] text-obsidian-400 uppercase tracking-wider block">Select Color</span>
-                <div className="flex gap-1.5 flex-wrap">
-                  {PRESET_COLORS.map(col => (
-                    <button
-                      key={col}
-                      type="button"
-                      onClick={() => setNewCatColor(col)}
-                      className="w-4 h-4 rounded-full flex justify-center items-center cursor-pointer transition-transform hover:scale-110"
-                      style={{ backgroundColor: col }}
-                    >
-                      {newCatColor === col && <Circle size={6} className="text-white fill-white" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 text-xs pt-1">
-                <button
-                  type="submit"
-                  className="flex-1 bg-gradient-cyber font-semibold text-white px-2 py-1 rounded cursor-pointer"
-                >
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddForm(false)}
-                  className="flex-1 bg-obsidian-800 text-obsidian-300 px-2 py-1 rounded cursor-pointer hover:bg-obsidian-700"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
 
           {/* List of Custom Categories */}
           <div className="space-y-0.5">
@@ -255,6 +175,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Backup & System Operations Footer */}
       <div className="p-4 border-t border-obsidian-850 space-y-1.5">
         <button
+          onClick={onOpenRecycleBin}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 transition-all duration-150 cursor-pointer"
+          title="Open Recycle Bin"
+        >
+          <Trash size={14} className="text-cyber-rose" />
+          {!isCollapsed && <span>Recycle Bin</span>}
+        </button>
+
+        <button
           onClick={onImportBackup}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 transition-all duration-150 cursor-pointer"
           title="Import JSON"
@@ -272,6 +201,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isCollapsed && <span>Export Database</span>}
         </button>
       </div>
+
+      {/* Category Creation Modal overlay */}
+      <CategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        onSave={onAddCategory}
+      />
     </aside>
   );
 };

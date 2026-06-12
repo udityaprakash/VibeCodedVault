@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('api', {
   incrementUsage: (promptId) => ipcRenderer.invoke('db-increment-usage', promptId),
   saveCategory: (category) => ipcRenderer.invoke('db-save-category', category),
   deleteCategory: (categoryId) => ipcRenderer.invoke('db-delete-category', categoryId),
+  restorePrompt: (promptId) => ipcRenderer.invoke('db-restore-prompt', promptId),
+  deletePromptPermanently: (promptId) => ipcRenderer.invoke('db-delete-prompt-permanently', promptId),
+  emptyTrash: () => ipcRenderer.invoke('db-empty-trash'),
   setAllData: (data) => ipcRenderer.send('db-set-all', data),
   
   // Backup / Import API
