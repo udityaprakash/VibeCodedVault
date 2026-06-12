@@ -13,7 +13,7 @@ interface SidebarProps {
   categories: Category[];
   selectedCategoryId: string | null; // 'all', 'favorites', 'pinned', or a category UUID
   onSelectCategory: (id: string | null) => void;
-  onAddCategory: (category: Partial<Category>) => void;
+  onAddCategory: (category: Partial<Category> & { name: string }) => void;
   onDeleteCategory: (id: string) => void;
   onExportBackup: () => void;
   onImportBackup: () => void;

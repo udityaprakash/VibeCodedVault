@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Trash2, RotateCcw, AlertOctagon, Zap } from 'lucide-react';
+import { X, Trash2, RotateCcw, AlertOctagon } from 'lucide-react';
 import type { Prompt } from '../types';
 
 interface RecycleBinProps {

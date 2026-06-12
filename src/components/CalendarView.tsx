@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  X, ChevronLeft, ChevronRight, Calendar, Info, 
-  Layers, Pin, Star, Copy, Check, Eye
+  X, ChevronLeft, ChevronRight, Calendar, Info, Eye
 } from 'lucide-react';
 import type { Prompt, Category } from '../types';
 

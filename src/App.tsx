@@ -937,7 +937,7 @@ function App() {
     await handleSavePrompt(updated);
   };
 
-  const handleAddCategory = async (categoryData: Partial<Category>) => {
+  const handleAddCategory = async (categoryData: Partial<Category> & { name: string }) => {
     try {
       if (window.api && window.api.saveCategory) {
         const data = await window.api.saveCategory(categoryData);

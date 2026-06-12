@@ -75,14 +75,14 @@ export class TextAreaSwitch extends PromptSwitch {
   }
 }
 
-// TODO: Implement copyable text switch subclass
-export class CopyableTextSwitch extends PromptSwitch {
-  constructor(id: string, label = 'Additional Copy Text', value = '') {
+// TODO: Implement copyable switch subclass
+export class CopyableSwitch extends PromptSwitch {
+  constructor(id: string, label = 'Copy Configuration', value = 'description') {
     super(id, 'copyable', label, value);
   }
 
-  clone(): CopyableTextSwitch {
-    return new CopyableTextSwitch(this.id, this.label, this.value);
+  clone(): CopyableSwitch {
+    return new CopyableSwitch(this.id, this.label, this.value);
   }
 
   toRaw(): RawSwitchData {
@@ -212,7 +212,7 @@ export class SwitchFactory {
       case 'textarea':
         return new TextAreaSwitch(raw.id, raw.label, raw.value);
       case 'copyable':
-        return new CopyableTextSwitch(raw.id, raw.label, raw.value);
+        return new CopyableSwitch(raw.id, raw.label, raw.value);
       case 'link':
         return new LinkSwitch(raw.id, raw.label, raw.value);
       case 'color':
@@ -238,7 +238,7 @@ export class SwitchFactory {
       case 'textarea':
         return new TextAreaSwitch(id, 'Notes/Observations', '');
       case 'copyable':
-        return new CopyableTextSwitch(id, 'Copyable Block', '');
+        return new CopyableSwitch(id, 'Copy Button Action', 'description');
       case 'link':
         return new LinkSwitch(id, 'Reference Link', '');
       case 'color':

@@ -109,8 +109,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   useEffect(() => {
     if (prompt) {
       setTitle(prompt.title);
-      setDescription(prompt.description || '');
-      setContent(prompt.content);
+      setDescription(prompt.description || prompt.content || '');
+      setContent(prompt.description || prompt.content || '');
       setCategoryId(prompt.categoryId);
       setModel(prompt.model);
       setShowCustomModelInput(false);
@@ -121,7 +121,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setPromptSwitches(prompt.switches || []);
       
       // Parse initial placeholders
-      const vars = extractPlaceholders(prompt.content);
+      const vars = extractPlaceholders(prompt.description || prompt.content || '');
       const initialVars: Record<string, string> = {};
       vars.forEach(v => {
         initialVars[v] = '';
@@ -193,9 +193,10 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     return Array.from(matches);
   };
 
-  // Re-run extraction when content changes in editor
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  // Re-run extraction when description changes in editor
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
+    setDescription(val);
     setContent(val);
     
     const vars = extractPlaceholders(val);
@@ -220,7 +221,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
   // Compile prompt by replacing placeholders with form values
   const getCompiledContent = () => {
-    let result = content;
+    let result = description;
     Object.entries(variables).forEach(([key, val]) => {
       const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       const regex = new RegExp(`\\{\\{\\s*${escapedKey}\\s*\\}\\}`, 'g');
@@ -243,7 +244,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
   // Simulated AI polisher that expands prompts elegantly
   const handleAIPolish = () => {
-    if (!content.trim()) return;
+    if (!description.trim()) return;
     setPolishing(true);
 
     setTimeout(() => {
@@ -254,8 +255,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         `- Follow strict type-safety boundaries where applicable.\n` +
         `- Avoid generic guidelines; prioritize advanced optimization and curated design models.\n\n` +
         `Core Prompt Task:\n` +
-        content;
+        description;
       
+      setDescription(polished);
       setContent(polished);
       setPolishing(false);
       
@@ -271,6 +273,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
   // Revert version callback
   const handleRevertVersion = (historicContent: string) => {
+    setDescription(historicContent);
     setContent(historicContent);
     setActiveTab('editor');
     
@@ -307,7 +310,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   };
 
   const handleAddSwitch = (type: string) => {
-    if (promptSwitches.some(s => s.type === type)) return;
+    if (type !== 'textarea' && type !== 'checkbox' && promptSwitches.some(s => s.type === type)) return;
     const defaultSw = SwitchFactory.createDefault(type);
     setPromptSwitches(prev => [...prev, defaultSw.toRaw()]);
     setShowAddSwitchMenu(false);
@@ -326,7 +329,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   };
 
   const handleSave = () => {
-    if (!title.trim() || !content.trim()) return;
+    if (!title.trim() || !description.trim()) return;
 
     const tags = tagsInput
       .split(',')
@@ -472,91 +475,11 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 </div>
               </div>
 
-              {/* Row 2: Description */}
-              <div>
-                <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Description</label>
-                <input
-                  type="text"
-                  placeholder="Describe what this prompt achieves (e.g. creates detailed portraits, code boilerplate...)"
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-400"
-                />
-              </div>
-
-              {/* Row 3: Category & Compatibility */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Category</label>
-                  <select
-                    value={categoryId || ''}
-                    onChange={e => handleCategoryChange(e.target.value || null)}
-                    className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300 font-semibold cursor-pointer"
-                  >
-                    <option value="">Uncategorized / General</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Compatibility</label>
-                  <select
-                    value={model}
-                    onChange={e => {
-                      if (e.target.value === CUSTOM_MODEL_VALUE) {
-                        setShowCustomModelInput(true);
-                        return;
-                      }
-                      setModel(e.target.value);
-                      setShowCustomModelInput(false);
-                    }}
-                    className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300 font-semibold cursor-pointer"
-                  >
-                    {allModelOptions.map(m => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                    <option value={CUSTOM_MODEL_VALUE}>+ Custom compatibility tag...</option>
-                  </select>
-
-                  {showCustomModelInput && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="Enter custom compatibility tag"
-                        value={customModelInput}
-                        onChange={e => setCustomModelInput(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            addCustomModel(customModelInput);
-                          }
-                        }}
-                        className="flex-1 bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300"
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={() => addCustomModel(customModelInput)}
-                        className="px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-cyber-violet/15 border border-cyber-violet/40 text-cyber-violet hover:bg-cyber-violet/25 transition-colors"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Row 4: Prompt Content Canvas & AI Polish */}
+              {/* Row 2: Description (Prompt Text Template) */}
               <div className="relative">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider flex items-center gap-1.5">
-                    Prompt Prompt Text
+                    Description (Prompt Text Template)
                     <span className="cursor-help" title="Use double curly braces like {{topic}} to declare variables that generate inputs dynamically in compile view.">
                       <Info size={12} className="text-obsidian-600" />
                     </span>
@@ -565,7 +488,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   {/* AI Polish Trigger Button */}
                   <button
                     onClick={handleAIPolish}
-                    disabled={polishing || !content.trim()}
+                    disabled={polishing || !description.trim()}
                     className={`flex items-center gap-1 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer border transition-all ${
                       polishing 
                         ? 'bg-cyber-violet/20 border-cyber-violet text-white animate-pulse'
@@ -579,8 +502,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
                 <textarea
                   placeholder="Write your prompt content here... Use {{variableName}} to define fillable parameters. E.g. 'Generate a logo about {{topic}} using {{colors}} color scheme.'"
-                  value={content}
-                  onChange={handleContentChange}
+                  value={description}
+                  onChange={handleDescriptionChange}
                   rows={8}
                   className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet p-4 rounded-xl text-xs text-obsidian-300 font-mono leading-relaxed resize-y focus:outline-none"
                 />
@@ -693,14 +616,27 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
                             {sw.type === 'copyable' && (
                               <div>
-                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Copyable Text Value</label>
-                                <textarea
-                                  value={sw.value}
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Copy Target Action</label>
+                                <select
+                                  value={sw.value || 'description'}
                                   onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
-                                  rows={1}
-                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300 resize-none font-mono"
-                                  placeholder="Text to be copied"
-                                />
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300 cursor-pointer font-semibold focus:outline-none"
+                                >
+                                  <option value="description">Description (Prompt Text)</option>
+                                  <option value="title">Title</option>
+                                  <option value="tags">Tags</option>
+                                  {promptSwitches.some(s => s.type === 'note') && (
+                                    <option value="note">Calendar Note</option>
+                                  )}
+                                  {promptSwitches
+                                    .filter(s => s.type === 'textarea')
+                                    .map(s => (
+                                      <option key={s.id} value={s.id}>
+                                        Text Field: {s.label || 'Unnamed'}
+                                      </option>
+                                    ))
+                                  }
+                                </select>
                               </div>
                             )}
 

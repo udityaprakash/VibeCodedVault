@@ -10,7 +10,7 @@ import { SwitchFactory } from '../utils/switches';
 interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (category: Partial<Category>) => void;
+  onSave: (category: Partial<Category> & { name: string }) => void;
   categoryToEdit?: Category | null;
 }
 
@@ -46,7 +46,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
   // TODO: Implement handleAddSwitch to append preset switch
   const handleAddSwitch = (type: string) => {
     // Avoid duplicates
-    if (switches.some(s => s.type === type)) return;
+    if (type !== 'textarea' && type !== 'checkbox' && switches.some(s => s.type === type)) return;
     
     const newSwitchObj = SwitchFactory.createDefault(type);
     setSwitches(prev => [...prev, newSwitchObj.toRaw()]);
@@ -186,7 +186,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                   <div className="absolute right-0 mt-2 w-64 rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md shadow-2xl p-1.5 z-50 max-h-60 overflow-y-auto">
                     <div className="text-[9px] uppercase tracking-wider text-obsidian-500 px-2 py-1">Available Switches</div>
                     {SWITCH_OPTIONS.map(opt => {
-                      const isAdded = switches.some(s => s.type === opt.type);
+                      const isAdded = opt.type !== 'textarea' && opt.type !== 'checkbox' && switches.some(s => s.type === opt.type);
                       const IconComp = opt.icon;
                       return (
                         <button

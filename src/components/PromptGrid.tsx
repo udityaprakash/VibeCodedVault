@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Pin, Star, Copy, Check, Flame, Layers, 
-  ExternalLink, CheckSquare, Square, FileText, Link2
+  ExternalLink, CheckSquare, Square, Link2
 } from 'lucide-react';
 import type { Prompt, Category, RawSwitchData } from '../types';
 
