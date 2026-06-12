@@ -5,7 +5,9 @@ import { PromptGrid } from './components/PromptGrid';
 import { PromptEditor } from './components/PromptEditor';
 import { CommandPalette } from './components/CommandPalette';
 import { BackupDialog } from './components/BackupDialog';
-import type { Category, Prompt, DatabaseData, UpdateInfo } from './types';
+import { RecycleBin } from './components/RecycleBin';
+import { CalendarView } from './components/CalendarView';
+import type { Category, Prompt, DatabaseData, UpdateInfo, RawSwitchData } from './types';
 import { 
   Search, Terminal, Plus, Zap, Bookmark, AlertTriangle, Layers
 } from 'lucide-react';
@@ -404,6 +406,11 @@ function App() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Recycle bin and calendar views states
+  const [deletedPrompts, setDeletedPrompts] = useState<Prompt[]>([]);
+  const [recycleBinOpen, setRecycleBinOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
   // Editor state
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -671,17 +678,178 @@ function App() {
     }
   };
 
+  // Interval timer for scheduled tasks check (Reminders and Deletes)
+  useEffect(() => {
+    if (prompts.length > 0) {
+      const timer = setInterval(() => {
+        void scanSchedules(prompts);
+      }, 10000);
+      return () => clearInterval(timer);
+    }
+  }, [prompts]);
+
+  // Request notifications permissions on load
+  useEffect(() => {
+    if (window.Notification && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      void Notification.requestPermission();
+    }
+  }, []);
+
+  const scanSchedules = async (currentPrompts: Prompt[]) => {
+    const now = Date.now();
+    
+    // We must run sequentially to avoid concurrent filesystem writes in main.cjs
+    for (const prompt of currentPrompts) {
+      // 1. Check Scheduled Deletes
+      const deleteTime = prompt.switches?.find(s => s.type === 'delete')?.value;
+      if (deleteTime) {
+        const deleteTimeMs = new Date(deleteTime).getTime();
+        if (!isNaN(deleteTimeMs) && deleteTimeMs <= now) {
+          console.log(`Auto-deleting prompt: ${prompt.title} (due ${deleteTime})`);
+          if (window.api && window.api.deletePrompt) {
+            const data = await window.api.deletePrompt(prompt.id);
+            setPrompts(data.prompts || []);
+            setCategories(data.categories || []);
+            setDeletedPrompts(data.deletedPrompts || []);
+            triggerNotification(`Prompt "${prompt.title}" automatically moved to Recycle Bin.`, 'info');
+            // Refresh prompts list for next iterations
+            currentPrompts = data.prompts || [];
+            continue; // prompt deleted, skip reminder check
+          }
+        }
+      }
+
+      // 2. Check Reminders
+      const reminderSw = prompt.switches?.find(s => s.type === 'reminder');
+      if (reminderSw && reminderSw.value && reminderSw.value.dateTime) {
+        const reminderTime = new Date(reminderSw.value.dateTime).getTime();
+        if (!isNaN(reminderTime) && reminderTime <= now && !reminderSw.value.notified) {
+          console.log(`Triggering reminder for prompt: ${prompt.title} (due ${reminderSw.value.dateTime})`);
+          
+          // Trigger native OS notification
+          if (window.Notification) {
+            if (Notification.permission === 'granted') {
+              new Notification(`Prompt Vault: ${prompt.title}`, {
+                body: reminderSw.value.description || 'Scheduled reminder is active.'
+              });
+            } else if (Notification.permission !== 'denied') {
+              Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                  new Notification(`Prompt Vault: ${prompt.title}`, {
+                    body: reminderSw.value.description || 'Scheduled reminder is active.'
+                  });
+                }
+              });
+            }
+          }
+
+          // Update notified flag
+          const updatedSwitches = (prompt.switches || []).map(sw => 
+            sw.type === 'reminder' ? { ...sw, value: { ...sw.value, notified: true } } : sw
+          );
+          
+          const updatedPrompt = {
+            ...prompt,
+            switches: updatedSwitches
+          };
+
+          if (window.api && window.api.savePrompt) {
+            const data = await window.api.savePrompt(updatedPrompt);
+            setPrompts(data.prompts || []);
+            setCategories(data.categories || []);
+            setDeletedPrompts(data.deletedPrompts || []);
+            // Refresh prompts list for next iterations
+            currentPrompts = data.prompts || [];
+          }
+        }
+      }
+    }
+  };
+
+  const handleRestorePrompt = async (promptId: string) => {
+    try {
+      if (window.api && window.api.restorePrompt) {
+        const data = await window.api.restorePrompt(promptId);
+        setPrompts(data.prompts || []);
+        setCategories(data.categories || []);
+        setDeletedPrompts(data.deletedPrompts || []);
+        triggerNotification('Prompt template restored successfully.');
+      }
+    } catch (e) {
+      console.error(e);
+      triggerNotification('Failed to restore prompt.', 'error');
+    }
+  };
+
+  const handleDeletePromptPermanently = async (promptId: string) => {
+    try {
+      if (window.api && window.api.deletePromptPermanently) {
+        const data = await window.api.deletePromptPermanently(promptId);
+        setPrompts(data.prompts || []);
+        setCategories(data.categories || []);
+        setDeletedPrompts(data.deletedPrompts || []);
+        triggerNotification('Prompt template permanently deleted.');
+      }
+    } catch (e) {
+      console.error(e);
+      triggerNotification('Failed to permanently delete prompt.', 'error');
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    try {
+      if (window.api && window.api.emptyTrash) {
+        const data = await window.api.emptyTrash();
+        setPrompts(data.prompts || []);
+        setCategories(data.categories || []);
+        setDeletedPrompts(data.deletedPrompts || []);
+        triggerNotification('Recycle Bin emptied.');
+      }
+    } catch (e) {
+      console.error(e);
+      triggerNotification('Failed to empty Recycle Bin.', 'error');
+    }
+  };
+
+  const handleUpdatePromptSwitches = async (promptId: string, updatedSwitches: RawSwitchData[]) => {
+    const prompt = prompts.find(p => p.id === promptId);
+    if (prompt) {
+      const updatedPrompt = {
+        ...prompt,
+        switches: updatedSwitches
+      };
+      // Save without prompt editor overlay opening
+      try {
+        if (window.api && window.api.savePrompt) {
+          const data = await window.api.savePrompt(updatedPrompt);
+          setPrompts(data.prompts || []);
+          setCategories(data.categories || []);
+          setDeletedPrompts(data.deletedPrompts || []);
+        } else {
+          setPrompts(prev => prev.map(p => p.id === promptId ? updatedPrompt : p));
+        }
+      } catch (e) {
+        console.error('Failed to update switches:', e);
+      }
+    }
+  };
+
   const loadDatabase = async () => {
     try {
       if (window.api && window.api.getAllData) {
         const data = await window.api.getAllData();
         setPrompts(data.prompts || []);
         setCategories(data.categories || []);
+        setDeletedPrompts(data.deletedPrompts || []);
+        
+        // Trigger Option A catch-up check on startup
+        void scanSchedules(data.prompts || []);
       } else {
         // Fallback for browser previews
         console.warn('Electron window.api not detected, seeding mock browser memory.');
         setPrompts(FALLBACK_SEED.prompts);
         setCategories(FALLBACK_SEED.categories);
+        setDeletedPrompts([]);
       }
     } catch (e) {
       console.error('Failed to load database:', e);
@@ -706,8 +874,9 @@ function App() {
     try {
       if (window.api && window.api.savePrompt) {
         const data = await window.api.savePrompt(promptData);
-        setPrompts(data.prompts);
-        setCategories(data.categories);
+        setPrompts(data.prompts || []);
+        setCategories(data.categories || []);
+        setDeletedPrompts(data.deletedPrompts || []);
         triggerNotification(promptData.id ? 'Prompt template saved.' : 'New prompt template created.');
       } else {
         // Fallback save mock memory
@@ -739,13 +908,14 @@ function App() {
   };
 
   const handleDeletePrompt = async (promptId: string) => {
-    if (!confirm('Are you sure you want to permanently delete this template?')) return;
+    if (!confirm('Are you sure you want to move this template to the Recycle Bin?')) return;
     try {
       if (window.api && window.api.deletePrompt) {
         const data = await window.api.deletePrompt(promptId);
-        setPrompts(data.prompts);
-        setCategories(data.categories);
-        triggerNotification('Prompt template deleted.');
+        setPrompts(data.prompts || []);
+        setCategories(data.categories || []);
+        setDeletedPrompts(data.deletedPrompts || []);
+        triggerNotification('Prompt template moved to Recycle Bin.');
       } else {
         setPrompts(prev => prev.filter(p => p.id !== promptId));
         triggerNotification('Template deleted.');
@@ -767,27 +937,24 @@ function App() {
     await handleSavePrompt(updated);
   };
 
-  const handleAddCategory = async (name: string, icon: string, color: string) => {
+  const handleAddCategory = async (categoryData: Partial<Category>) => {
     try {
-      const normalizedName = name.trim().slice(0, 30);
-      if (!normalizedName) {
-        return;
-      }
-
       if (window.api && window.api.saveCategory) {
-        const data = await window.api.saveCategory({ name: normalizedName, icon, color });
-        setPrompts(data.prompts);
-        setCategories(data.categories);
-        triggerNotification(`Category "${normalizedName}" created.`);
+        const data = await window.api.saveCategory(categoryData);
+        setPrompts(data.prompts || []);
+        setCategories(data.categories || []);
+        setDeletedPrompts(data.deletedPrompts || []);
+        triggerNotification(categoryData.id ? `Category "${categoryData.name}" updated.` : `Category "${categoryData.name}" created.`);
       } else {
         const newCat: Category = {
-          id: 'mock_cat_' + Math.random().toString(36).substr(2, 9),
-          name: normalizedName,
-          icon,
-          color
+          id: categoryData.id || 'mock_cat_' + Math.random().toString(36).substr(2, 9),
+          name: categoryData.name || 'Mock',
+          icon: categoryData.icon || 'Zap',
+          color: categoryData.color || '#8B5CF6',
+          switches: categoryData.switches || []
         };
         setCategories(prev => [...prev, newCat]);
-        triggerNotification(`Category "${normalizedName}" created locally.`);
+        triggerNotification(`Category "${categoryData.name}" created locally.`);
       }
     } catch (e) {
       console.error('Add category failed:', e);
@@ -804,8 +971,9 @@ function App() {
     try {
       if (window.api && window.api.deleteCategory) {
         const data = await window.api.deleteCategory(categoryId);
-        setPrompts(data.prompts);
-        setCategories(data.categories);
+        setPrompts(data.prompts || []);
+        setCategories(data.categories || []);
+        setDeletedPrompts(data.deletedPrompts || []);
         triggerNotification(`Category "${cat.name}" deleted.`);
       } else {
         setCategories(prev => prev.filter(c => c.id !== categoryId));
@@ -1114,6 +1282,8 @@ function App() {
         onAccentColorChange={handleAccentColorChange}
         onCheckForUpdates={() => void checkForUpdates(false)}
         onUpdateNow={() => void handleUpdateNow()}
+        onOpenCalendar={() => setCalendarOpen(true)}
+        onOpenRecycleBin={() => setRecycleBinOpen(true)}
       />
 
       {/* Update Download / Install Modal */}
@@ -1170,6 +1340,7 @@ function App() {
           onDeleteCategory={handleDeleteCategory}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+          onOpenRecycleBin={() => setRecycleBinOpen(true)}
         />
 
         {/* Main Dashboard Space */}
@@ -1259,6 +1430,7 @@ function App() {
                 onSelectPrompt={handleSelectPrompt}
                 onToggleFavorite={handleToggleFavorite}
                 onTogglePin={handleTogglePin}
+                onUpdateSwitches={handleUpdatePromptSwitches}
               />
             )}
           </div>
@@ -1323,6 +1495,26 @@ function App() {
             }`} />
             <span className="text-xs font-semibold">{notification.message}</span>
           </div>
+        )}
+
+        {recycleBinOpen && (
+          <RecycleBin
+            isOpen={recycleBinOpen}
+            onClose={() => setRecycleBinOpen(false)}
+            deletedPrompts={deletedPrompts}
+            onRestore={handleRestorePrompt}
+            onDeletePermanently={handleDeletePromptPermanently}
+            onEmptyTrash={handleEmptyTrash}
+          />
+        )}
+
+        {calendarOpen && (
+          <CalendarView
+            isOpen={calendarOpen}
+            onClose={() => setCalendarOpen(false)}
+            prompts={prompts}
+            categories={categories}
+          />
         )}
 
       </div>

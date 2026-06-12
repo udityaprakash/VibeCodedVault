@@ -143,7 +143,18 @@ function readDatabase() {
   initDatabase();
   try {
     const dataStr = fs.readFileSync(dbFilePath, 'utf-8');
-    return JSON.parse(dataStr);
+    const db = JSON.parse(dataStr);
+    
+    // Purge trash items older than 30 days
+    if (db.deletedPrompts && Array.isArray(db.deletedPrompts)) {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const originalLength = db.deletedPrompts.length;
+      db.deletedPrompts = db.deletedPrompts.filter(p => p.deletedAt && p.deletedAt > thirtyDaysAgo);
+      if (db.deletedPrompts.length !== originalLength) {
+        writeDatabase(db);
+      }
+    }
+    return db;
   } catch (e) {
     console.error('Failed to read database, returning default seed:', e);
     return getSeedData();
@@ -578,7 +589,54 @@ ipcMain.handle('db-save-prompt', (event, prompt) => {
 
 ipcMain.handle('db-delete-prompt', (event, promptId) => {
   const db = readDatabase();
-  db.prompts = db.prompts.filter(p => p.id !== promptId);
+  const promptIndex = db.prompts.findIndex(p => p.id === promptId);
+  if (promptIndex !== -1) {
+    const [promptToDelete] = db.prompts.splice(promptIndex, 1);
+    if (!db.deletedPrompts) {
+      db.deletedPrompts = [];
+    }
+    // Avoid duplicates in trash
+    db.deletedPrompts = db.deletedPrompts.filter(p => p.id !== promptId);
+    db.deletedPrompts.push({
+      ...promptToDelete,
+      deletedAt: Date.now()
+    });
+    writeDatabase(db);
+  }
+  return readDatabase();
+});
+
+ipcMain.handle('db-restore-prompt', (event, promptId) => {
+  const db = readDatabase();
+  if (!db.deletedPrompts) {
+    db.deletedPrompts = [];
+  }
+  const promptIndex = db.deletedPrompts.findIndex(p => p.id === promptId);
+  if (promptIndex !== -1) {
+    const [promptToRestore] = db.deletedPrompts.splice(promptIndex, 1);
+    delete promptToRestore.deletedAt;
+    
+    // Check if it's already in active prompts to avoid duplicates
+    if (!db.prompts.some(p => p.id === promptId)) {
+      db.prompts.push(promptToRestore);
+    }
+    writeDatabase(db);
+  }
+  return readDatabase();
+});
+
+ipcMain.handle('db-delete-prompt-permanently', (event, promptId) => {
+  const db = readDatabase();
+  if (db.deletedPrompts) {
+    db.deletedPrompts = db.deletedPrompts.filter(p => p.id !== promptId);
+    writeDatabase(db);
+  }
+  return readDatabase();
+});
+
+ipcMain.handle('db-empty-trash', (event) => {
+  const db = readDatabase();
+  db.deletedPrompts = [];
   writeDatabase(db);
   return readDatabase();
 });

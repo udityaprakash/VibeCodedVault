@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, Minus, Moon, Plus, RefreshCw, Settings2, Square, Sun, Tag, Trash2, X } from 'lucide-react';
+import { Download, Minus, Moon, Plus, RefreshCw, Settings2, Square, Sun, Tag, Trash2, X, Calendar } from 'lucide-react';
 import {
   PRESET_MODELS,
   getCustomModels,
@@ -27,6 +27,8 @@ interface TitleBarProps {
   onCloseSettings: () => void;
   onCheckForUpdates: () => void;
   onUpdateNow: () => void;
+  onOpenCalendar: () => void;
+  onOpenRecycleBin: () => void;
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
@@ -45,6 +47,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onCloseSettings,
   onCheckForUpdates,
   onUpdateNow,
+  onOpenCalendar,
+  onOpenRecycleBin,
 }) => {
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -143,6 +147,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       {/* Title Windows Controls */}
       <div className="titlebar-nodrag flex items-center h-full relative" ref={settingsRef}>
         <button
+          onClick={onOpenCalendar}
+          className="h-7 w-7 mr-1.5 rounded-full border border-obsidian-800 bg-obsidian-900/85 text-obsidian-400 hover:text-obsidian-100 hover:border-cyber-cyan/50 flex items-center justify-center transition-all duration-200"
+          title="Open Calendar View"
+          aria-label="Open Calendar"
+        >
+          <Calendar size={13} />
+        </button>
+
+        <button
           onClick={onToggleTheme}
           className="group h-7 w-[54px] mr-1.5 ml-1 rounded-full border border-obsidian-800 bg-obsidian-900/90 px-1 flex items-center transition-all duration-300 hover:border-cyber-violet/60"
           title={`Switch to ${themeMode === 'dark' ? 'light' : 'dark'} mode`}
@@ -157,6 +170,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           >
             {themeMode === 'dark' ? <Moon size={11} /> : <Sun size={11} />}
           </span>
+        </button>
+
+        <button
+          onClick={onOpenRecycleBin}
+          className="h-7 w-7 mr-1.5 rounded-full border border-obsidian-800 bg-obsidian-900/85 text-obsidian-400 hover:text-obsidian-100 hover:border-cyber-rose/50 flex items-center justify-center transition-all duration-200"
+          title="Open Recycle Bin"
+          aria-label="Open Recycle Bin"
+        >
+          <Trash2 size={13} />
         </button>
 
         <button

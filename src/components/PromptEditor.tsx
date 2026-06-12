@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { 
   Save, Sparkles, Copy, Check, Calendar, History, 
-  Layers, Pin, Star, Info, Settings, Eye, Edit, Trash2
+  Layers, Pin, Star, Info, Settings, Eye, Edit, Trash2, Plus,
+  Type, CheckSquare, AlignLeft, Link, Palette, Clock, AlertTriangle
 } from 'lucide-react';
-import type { Prompt, Category } from '../types';
+import type { Prompt, Category, RawSwitchData } from '../types';
 import {
   CUSTOM_MODELS_UPDATED_EVENT,
   PRESET_MODELS,
@@ -12,6 +13,7 @@ import {
   resolveExistingModelName,
   saveCustomModels,
 } from '../utils/aiModels';
+import { SwitchFactory } from '../utils/switches';
 
 interface PromptEditorProps {
   prompt: Prompt | null; // Null means create new
@@ -22,6 +24,18 @@ interface PromptEditorProps {
 }
 
 const CUSTOM_MODEL_VALUE = '__custom__';
+
+const SWITCH_OPTIONS = [
+  { type: 'strikethrough', name: 'Strikethrough Title', desc: 'Crosses out the prompt title text', icon: Type },
+  { type: 'checkbox', name: 'Checkbox Status', desc: 'Adds a toggle checkbox (e.g. TODO / Done)', icon: CheckSquare },
+  { type: 'textarea', name: 'Text Area Field', desc: 'Adds a large paragraphs input field', icon: AlignLeft },
+  { type: 'copyable', name: 'Copyable Text Block', desc: 'Adds copyable text areas with quick-copy buttons', icon: Copy },
+  { type: 'link', name: 'External Link', desc: 'Adds direct web links opening in default browser', icon: Link },
+  { type: 'color', name: 'Custom Tile Color', desc: 'Applies transparency color layer to prompt cards', icon: Palette },
+  { type: 'reminder', name: 'Scheduled Reminder', desc: 'Sets custom time reminders with system notifications', icon: Clock },
+  { type: 'delete', name: 'Scheduled Auto Delete', desc: 'Automatically schedules removal of tiles to recycle bin', icon: AlertTriangle },
+  { type: 'note', name: 'Calendar Note', desc: 'Overrides default title shown in the calendar view', icon: Calendar }
+];
 
 export const PromptEditor: React.FC<PromptEditorProps> = ({
   prompt,
@@ -42,6 +56,10 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   const [tagsInput, setTagsInput] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+
+  // Switches state
+  const [promptSwitches, setPromptSwitches] = useState<RawSwitchData[]>([]);
+  const [showAddSwitchMenu, setShowAddSwitchMenu] = useState(false);
 
   // Tab views
   const [activeTab, setActiveTab] = useState<'editor' | 'compiler' | 'history'>('editor');
@@ -100,6 +118,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setTagsInput(prompt.tags ? prompt.tags.join(', ') : '');
       setIsPinned(prompt.isPinned || false);
       setIsFavorite(prompt.isFavorite || false);
+      setPromptSwitches(prompt.switches || []);
       
       // Parse initial placeholders
       const vars = extractPlaceholders(prompt.content);
@@ -114,7 +133,23 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setTitle('');
       setDescription('');
       setContent('');
-      setCategoryId(categories.length > 0 ? categories[0].id : null);
+      
+      const firstCatId = categories.length > 0 ? categories[0].id : null;
+      setCategoryId(firstCatId);
+      
+      // Load first category preset switches if exist
+      if (firstCatId) {
+        const cat = categories.find(c => c.id === firstCatId);
+        setPromptSwitches(
+          cat?.switches?.map(s => ({
+            ...s,
+            id: 'sw_' + Math.random().toString(36).substr(2, 9)
+          })) || []
+        );
+      } else {
+        setPromptSwitches([]);
+      }
+
       setModel('General');
       setShowCustomModelInput(false);
       setCustomModelInput('');
@@ -247,6 +282,49 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     setVariables(updatedVars);
   };
 
+  // Dynamic switches management
+  const handleCategoryChange = (newCatId: string | null) => {
+    setCategoryId(newCatId);
+    if (!newCatId) return;
+
+    const cat = categories.find(c => c.id === newCatId);
+    if (cat && cat.switches) {
+      // Overwrite or append preset switches
+      setPromptSwitches(prev => {
+        const next = [...prev];
+        cat.switches?.forEach(catSw => {
+          const exists = next.some(s => s.type === catSw.type);
+          if (!exists) {
+            next.push({
+              ...catSw,
+              id: 'sw_' + Math.random().toString(36).substr(2, 9)
+            });
+          }
+        });
+        return next;
+      });
+    }
+  };
+
+  const handleAddSwitch = (type: string) => {
+    if (promptSwitches.some(s => s.type === type)) return;
+    const defaultSw = SwitchFactory.createDefault(type);
+    setPromptSwitches(prev => [...prev, defaultSw.toRaw()]);
+    setShowAddSwitchMenu(false);
+  };
+
+  const handleRemoveSwitch = (id: string) => {
+    setPromptSwitches(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleUpdateSwitchLabel = (id: string, newLabel: string) => {
+    setPromptSwitches(prev => prev.map(s => s.id === id ? { ...s, label: newLabel } : s));
+  };
+
+  const handleUpdateSwitchValue = (id: string, newValue: any) => {
+    setPromptSwitches(prev => prev.map(s => s.id === id ? { ...s, value: newValue } : s));
+  };
+
   const handleSave = () => {
     if (!title.trim() || !content.trim()) return;
 
@@ -264,7 +342,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       categoryId,
       model: model.trim() || 'General',
       isPinned,
-      isFavorite
+      isFavorite,
+      switches: promptSwitches
     });
   };
 
@@ -355,7 +434,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
               {/* Row 1: Title & Pin/Favorite state */}
               <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div className="flex-1 w-full">
-                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">Title</label>
+                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Title</label>
                   <input
                     type="text"
                     placeholder="Enter an elegant prompt title..."
@@ -395,7 +474,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
               {/* Row 2: Description */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">Description</label>
+                <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Description</label>
                 <input
                   type="text"
                   placeholder="Describe what this prompt achieves (e.g. creates detailed portraits, code boilerplate...)"
@@ -408,10 +487,10 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
               {/* Row 3: Category & Compatibility */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">Category</label>
+                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Category</label>
                   <select
                     value={categoryId || ''}
-                    onChange={e => setCategoryId(e.target.value || null)}
+                    onChange={e => handleCategoryChange(e.target.value || null)}
                     className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300 font-semibold cursor-pointer"
                   >
                     <option value="">Uncategorized / General</option>
@@ -424,7 +503,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">Compatibility</label>
+                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Compatibility</label>
                   <select
                     value={model}
                     onChange={e => {
@@ -475,7 +554,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
               {/* Row 4: Prompt Content Canvas & AI Polish */}
               <div className="relative">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider flex items-center gap-1.5">
                     Prompt Prompt Text
                     <span className="cursor-help" title="Use double curly braces like {{topic}} to declare variables that generate inputs dynamically in compile view.">
@@ -502,14 +581,14 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   placeholder="Write your prompt content here... Use {{variableName}} to define fillable parameters. E.g. 'Generate a logo about {{topic}} using {{colors}} color scheme.'"
                   value={content}
                   onChange={handleContentChange}
-                  rows={10}
+                  rows={8}
                   className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet p-4 rounded-xl text-xs text-obsidian-300 font-mono leading-relaxed resize-y focus:outline-none"
                 />
               </div>
 
               {/* Row 5: Tags list */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1">Tags (Comma-separated)</label>
+                <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Tags (Comma-separated)</label>
                 <input
                   type="text"
                   placeholder="e.g. writing, midjourney, coding, typescript"
@@ -518,6 +597,182 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-400 placeholder-obsidian-750"
                 />
               </div>
+
+              {/* Dynamic Switches Customization Workspace */}
+              {promptSwitches.length > 0 && (
+                <div className="border-t border-obsidian-850/60 pt-4 space-y-3">
+                  <h4 className="text-[10px] font-bold text-obsidian-400 uppercase tracking-widest">Active Switches Configuration</h4>
+                  <div className="space-y-3">
+                    {promptSwitches.map((sw) => {
+                      const opt = SWITCH_OPTIONS.find(o => o.type === sw.type);
+                      const IconComp = opt?.icon || Info;
+
+                      return (
+                        <div key={sw.id} className="p-4 rounded-xl border border-obsidian-850 bg-obsidian-950/30 space-y-3 transition-all">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <IconComp size={12} className="text-cyber-violet" />
+                              <span className="text-xs font-bold text-obsidian-200">{opt?.name}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSwitch(sw.id)}
+                              className="text-obsidian-500 hover:text-cyber-rose transition-colors p-1"
+                              title="Delete Switch"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Switch Label configuration */}
+                            <div>
+                              <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Label</label>
+                              <input
+                                type="text"
+                                value={sw.label}
+                                onChange={e => handleUpdateSwitchLabel(sw.id, e.target.value)}
+                                className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300"
+                                placeholder="Configure label text"
+                              />
+                            </div>
+
+                            {/* Specific Value customization inputs based on switch type */}
+                            {sw.type === 'color' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Value (Color Accent)</label>
+                                <input
+                                  type="color"
+                                  value={sw.value}
+                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
+                                  className="w-full h-7 rounded border border-obsidian-850 bg-transparent cursor-pointer"
+                                />
+                              </div>
+                            )}
+
+                            {sw.type === 'strikethrough' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Enable Strikethrough?</label>
+                                <select
+                                  value={String(sw.value)}
+                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value === 'true')}
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[11px] text-obsidian-300 font-semibold cursor-pointer"
+                                >
+                                  <option value="false">Unchecked (No strikethrough)</option>
+                                  <option value="true">Checked (Cross out title)</option>
+                                </select>
+                              </div>
+                            )}
+
+                            {sw.type === 'checkbox' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Default Checkbox Done State</label>
+                                <select
+                                  value={String(sw.value)}
+                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value === 'true')}
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[11px] text-obsidian-300 font-semibold cursor-pointer"
+                                >
+                                  <option value="false">TODO (Unchecked)</option>
+                                  <option value="true">DONE (Checked)</option>
+                                </select>
+                              </div>
+                            )}
+
+                            {sw.type === 'textarea' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Paragraph Content</label>
+                                <textarea
+                                  value={sw.value}
+                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
+                                  rows={1}
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300 resize-none font-mono"
+                                  placeholder="Default text field value"
+                                />
+                              </div>
+                            )}
+
+                            {sw.type === 'copyable' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Copyable Text Value</label>
+                                <textarea
+                                  value={sw.value}
+                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
+                                  rows={1}
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300 resize-none font-mono"
+                                  placeholder="Text to be copied"
+                                />
+                              </div>
+                            )}
+
+                            {sw.type === 'link' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Target URL Link</label>
+                                <input
+                                  type="text"
+                                  value={sw.value}
+                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300"
+                                  placeholder="https://..."
+                                />
+                              </div>
+                            )}
+
+                            {sw.type === 'note' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Note (Calendar display override)</label>
+                                <input
+                                  type="text"
+                                  value={sw.value}
+                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300"
+                                  placeholder="Default title override"
+                                />
+                              </div>
+                            )}
+
+                            {sw.type === 'reminder' && (
+                              <div className="col-span-2 grid grid-cols-2 gap-3 border-t border-obsidian-850/50 pt-2 mt-1">
+                                <div>
+                                  <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Reminder Date & Time</label>
+                                  <input
+                                    type="datetime-local"
+                                    value={sw.value?.dateTime || ''}
+                                    onChange={e => handleUpdateSwitchValue(sw.id, { ...sw.value, dateTime: e.target.value, notified: false })}
+                                    className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[11px] text-obsidian-300 cursor-pointer"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Notification Message</label>
+                                  <input
+                                    type="text"
+                                    value={sw.value?.description || ''}
+                                    onChange={e => handleUpdateSwitchValue(sw.id, { ...sw.value, description: e.target.value })}
+                                    className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[11px] text-obsidian-300"
+                                    placeholder="Reminder text"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {sw.type === 'delete' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Scheduled Destruction Date</label>
+                                <input
+                                  type="datetime-local"
+                                  value={sw.value || ''}
+                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[11px] text-obsidian-300 cursor-pointer"
+                                />
+                              </div>
+                            )}
+
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
             </div>
           )}
@@ -647,12 +902,12 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         </div>
 
         {/* Footer Actions Panel */}
-        <div className="px-6 py-4 border-t border-obsidian-850 bg-obsidian-950/40 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-obsidian-850 bg-obsidian-950/40 flex items-center justify-between shrink-0">
           <span className="text-[10px] text-obsidian-600 font-medium font-mono">
             {content.length} characters | {content.split(/\s+/).filter(Boolean).length} words
           </span>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 relative">
             {prompt && onDelete && (
               <button
                 type="button"
@@ -663,6 +918,48 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 <Trash2 size={14} />
               </button>
             )}
+
+            {/* Add Switch Popup menu */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowAddSwitchMenu(!showAddSwitchMenu)}
+                className="bg-obsidian-850 border border-obsidian-800 text-obsidian-300 font-semibold px-4 py-2 rounded-lg text-xs hover:bg-obsidian-800 cursor-pointer flex items-center gap-1.5"
+              >
+                <Plus size={14} />
+                Add Switches
+              </button>
+
+              {showAddSwitchMenu && (
+                <div className="absolute right-0 bottom-[44px] w-64 rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md shadow-2xl p-1.5 z-[100] max-h-60 overflow-y-auto">
+                  <div className="text-[9px] uppercase tracking-wider text-obsidian-500 px-2 py-1">Available Switches</div>
+                  {SWITCH_OPTIONS.map(opt => {
+                    const isAdded = promptSwitches.some(s => s.type === opt.type);
+                    const IconComp = opt.icon;
+                    return (
+                      <button
+                        key={opt.type}
+                        type="button"
+                        disabled={isAdded}
+                        onClick={() => handleAddSwitch(opt.type)}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-start gap-2.5 transition-all text-xs ${
+                          isAdded
+                            ? 'opacity-40 cursor-not-allowed text-obsidian-600'
+                            : 'hover:bg-obsidian-850 text-obsidian-300 hover:text-obsidian-100 cursor-pointer'
+                        }`}
+                      >
+                        <IconComp size={13} className="shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <div className="font-semibold">{opt.name}</div>
+                          <div className="text-[9px] text-obsidian-500 truncate">{opt.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <button
               onClick={onClose}
               className="bg-obsidian-850 border border-obsidian-800 text-obsidian-300 font-semibold px-4 py-2 rounded-lg text-xs hover:bg-obsidian-800 cursor-pointer transition-colors"
