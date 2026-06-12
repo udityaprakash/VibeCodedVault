@@ -45,8 +45,11 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
 
   // TODO: Implement handleAddSwitch to append preset switch
   const handleAddSwitch = (type: string) => {
-    // Avoid duplicates
-    if (type !== 'textarea' && type !== 'checkbox' && switches.some(s => s.type === type)) return;
+    const existingCount = switches.filter(s => s.type === type).length;
+    const isLimitReached = (type === 'textarea' || type === 'checkbox' || type === 'link')
+      ? existingCount >= 3
+      : existingCount >= 1;
+    if (isLimitReached) return;
     
     const newSwitchObj = SwitchFactory.createDefault(type);
     setSwitches(prev => [...prev, newSwitchObj.toRaw()]);
@@ -186,16 +189,19 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                   <div className="absolute right-0 mt-2 w-64 rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md shadow-2xl p-1.5 z-50 max-h-60 overflow-y-auto">
                     <div className="text-[9px] uppercase tracking-wider text-obsidian-500 px-2 py-1">Available Switches</div>
                     {SWITCH_OPTIONS.map(opt => {
-                      const isAdded = opt.type !== 'textarea' && opt.type !== 'checkbox' && switches.some(s => s.type === opt.type);
+                      const existingCount = switches.filter(s => s.type === opt.type).length;
+                      const isLimitReached = (opt.type === 'textarea' || opt.type === 'checkbox' || opt.type === 'link')
+                        ? existingCount >= 3
+                        : existingCount >= 1;
                       const IconComp = opt.icon;
                       return (
                         <button
                           key={opt.type}
                           type="button"
-                          disabled={isAdded}
+                          disabled={isLimitReached}
                           onClick={() => handleAddSwitch(opt.type)}
                           className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-start gap-2.5 transition-all text-xs ${
-                            isAdded
+                            isLimitReached
                               ? 'opacity-40 cursor-not-allowed text-obsidian-600'
                               : 'hover:bg-obsidian-850 text-obsidian-300 hover:text-obsidian-100 cursor-pointer'
                           }`}

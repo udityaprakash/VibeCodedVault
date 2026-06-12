@@ -142,8 +142,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         const cat = categories.find(c => c.id === firstCatId);
         setPromptSwitches(
           cat?.switches?.map(s => ({
-            ...s,
-            id: 'sw_' + Math.random().toString(36).substr(2, 9)
+            ...s
           })) || []
         );
       } else {
@@ -296,11 +295,10 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setPromptSwitches(prev => {
         const next = [...prev];
         cat.switches?.forEach(catSw => {
-          const exists = next.some(s => s.type === catSw.type);
+          const exists = next.some(s => s.id === catSw.id);
           if (!exists) {
             next.push({
-              ...catSw,
-              id: 'sw_' + Math.random().toString(36).substr(2, 9)
+              ...catSw
             });
           }
         });
@@ -310,7 +308,12 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   };
 
   const handleAddSwitch = (type: string) => {
-    if (type !== 'textarea' && type !== 'checkbox' && promptSwitches.some(s => s.type === type)) return;
+    const existingCount = promptSwitches.filter(s => s.type === type).length;
+    const isLimitReached = (type === 'textarea' || type === 'checkbox' || type === 'link')
+      ? existingCount >= 3
+      : existingCount >= 1;
+    if (isLimitReached) return;
+
     const defaultSw = SwitchFactory.createDefault(type);
     setPromptSwitches(prev => [...prev, defaultSw.toRaw()]);
     setShowAddSwitchMenu(false);
@@ -475,11 +478,11 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 </div>
               </div>
 
-              {/* Row 2: Description (Prompt Text Template) */}
+              {/* Row 2: Description */}
               <div className="relative">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider flex items-center gap-1.5">
-                    Description (Prompt Text Template)
+                    Description
                     <span className="cursor-help" title="Use double curly braces like {{topic}} to declare variables that generate inputs dynamically in compile view.">
                       <Info size={12} className="text-obsidian-600" />
                     </span>
@@ -507,6 +510,74 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   rows={8}
                   className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet p-4 rounded-xl text-xs text-obsidian-300 font-mono leading-relaxed resize-y focus:outline-none"
                 />
+              </div>
+
+              {/* Row 3: Category & Compatibility */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Category</label>
+                  <select
+                    value={categoryId || ''}
+                    onChange={e => handleCategoryChange(e.target.value || null)}
+                    className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300 font-semibold cursor-pointer focus:outline-none"
+                  >
+                    <option value="">Uncategorized / General</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">Compatibility</label>
+                  <select
+                    value={model}
+                    onChange={e => {
+                      if (e.target.value === CUSTOM_MODEL_VALUE) {
+                        setShowCustomModelInput(true);
+                        return;
+                      }
+                      setModel(e.target.value);
+                      setShowCustomModelInput(false);
+                    }}
+                    className="w-full bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300 font-semibold cursor-pointer focus:outline-none"
+                  >
+                    {allModelOptions.map(m => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_MODEL_VALUE}>+ Custom compatibility tag...</option>
+                  </select>
+
+                  {showCustomModelInput && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Enter custom compatibility tag"
+                        value={customModelInput}
+                        onChange={e => setCustomModelInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addCustomModel(customModelInput);
+                          }
+                        }}
+                        className="flex-1 bg-obsidian-950/80 border border-obsidian-850 focus-glow-violet px-3 py-2 rounded-lg text-xs text-obsidian-300 focus:outline-none"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addCustomModel(customModelInput)}
+                        className="px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-cyber-violet/15 border border-cyber-violet/40 text-cyber-violet hover:bg-cyber-violet/25 transition-colors cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Row 5: Tags list */}
@@ -760,7 +831,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   
                   <button
                     onClick={handleCopyCompiled}
-                    disabled={!content.trim()}
+                    disabled={!description.trim()}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border transition-all ${
                       copiedCompiled
                         ? 'bg-cyber-emerald/10 border-cyber-emerald text-cyber-emerald'
@@ -870,16 +941,19 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 <div className="absolute right-0 bottom-[44px] w-64 rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md shadow-2xl p-1.5 z-[100] max-h-60 overflow-y-auto">
                   <div className="text-[9px] uppercase tracking-wider text-obsidian-500 px-2 py-1">Available Switches</div>
                   {SWITCH_OPTIONS.map(opt => {
-                    const isAdded = promptSwitches.some(s => s.type === opt.type);
+                    const existingCount = promptSwitches.filter(s => s.type === opt.type).length;
+                    const isLimitReached = (opt.type === 'textarea' || opt.type === 'checkbox' || opt.type === 'link')
+                      ? existingCount >= 3
+                      : existingCount >= 1;
                     const IconComp = opt.icon;
                     return (
                       <button
                         key={opt.type}
                         type="button"
-                        disabled={isAdded}
+                        disabled={isLimitReached}
                         onClick={() => handleAddSwitch(opt.type)}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-start gap-2.5 transition-all text-xs ${
-                          isAdded
+                          isLimitReached
                             ? 'opacity-40 cursor-not-allowed text-obsidian-600'
                             : 'hover:bg-obsidian-850 text-obsidian-300 hover:text-obsidian-100 cursor-pointer'
                         }`}
@@ -904,9 +978,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
             </button>
             <button
               onClick={handleSave}
-              disabled={!title.trim() || !content.trim()}
+              disabled={!title.trim() || !description.trim()}
               className={`flex items-center gap-1.5 bg-gradient-cyber text-white font-semibold px-5 py-2 rounded-lg text-xs shadow-glow-violet cursor-pointer transition-opacity ${
-                (!title.trim() || !content.trim()) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
+                (!title.trim() || !description.trim()) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
               }`}
             >
               <Save size={14} />
