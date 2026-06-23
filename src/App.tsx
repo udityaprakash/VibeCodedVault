@@ -8,7 +8,9 @@ import { BackupDialog } from './components/BackupDialog';
 import { RecycleBin } from './components/RecycleBin';
 import { CalendarView } from './components/CalendarView';
 import { CategoryModal } from './components/CategoryModal';
-import type { Category, Prompt, DatabaseData, UpdateInfo, RawSwitchData } from './types';
+import { SettingsModal } from './components/SettingsModal';
+import { AIAgentPanel } from './components/AIAgentPanel';
+import type { Category, Prompt, DatabaseData, UpdateInfo, RawSwitchData, AIAgentSettings, ChatMessage } from './types';
 import { 
   Search, Terminal, Plus, Zap, Bookmark, AlertTriangle, Layers
 } from 'lucide-react';
@@ -401,6 +403,14 @@ const FALLBACK_SEED: DatabaseData = {
   ]
 };
 
+const DEFAULT_AI_SETTINGS: AIAgentSettings = {
+  enabled: false,
+  provider: 'gemini',
+  apiKey: '',
+  serverEnabled: false,
+  serverPort: 3015
+};
+
 function App() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -427,6 +437,21 @@ function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
   const [accentColor, setAccentColor] = useState('#8B5CF6');
   const [isThemeSettingsOpen, setIsThemeSettingsOpen] = useState(false);
+
+  // AI Agent states
+  const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [aiSettings, setAiSettings] = useState<AIAgentSettings>(() => {
+    const stored = localStorage.getItem('promptvault-ai-agent-settings');
+    if (stored) {
+      try {
+        return JSON.parse(stored) as AIAgentSettings;
+      } catch (e) {
+        console.warn('Failed to parse ai agent settings:', e);
+      }
+    }
+    return DEFAULT_AI_SETTINGS;
+  });
   const [backupDialog, setBackupDialog] = useState<BackupModalState | null>(null);
   const [appVersion, setAppVersion] = useState('v1.0.1');
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -442,6 +467,38 @@ function App() {
   // Load database on start
   useEffect(() => {
     loadDatabase();
+  }, []);
+
+  // Sync AI settings with main process
+  useEffect(() => {
+    if (window.api && window.api.updateAiAgentSettings) {
+      window.api.updateAiAgentSettings(aiSettings)
+        .catch(err => console.error('Failed to sync AI settings with main process:', err));
+    }
+  }, [aiSettings]);
+
+  // Subscribe to DB updates and theme changes from the Main Process
+  useEffect(() => {
+    if (window.api) {
+      if (window.api.onDbUpdated) {
+        window.api.onDbUpdated(() => {
+          console.log('Database updated from background/MCP. Reloading...');
+          void loadDatabase();
+        });
+      }
+
+      if (window.api.onSetThemeMode) {
+        window.api.onSetThemeMode((payload) => {
+          console.log('Theme changed from background/MCP:', payload);
+          if (payload.mode === 'light' || payload.mode === 'dark') {
+            setThemeMode(payload.mode);
+          }
+          if (payload.accentColor) {
+            setAccentColor(normalizeHex(payload.accentColor));
+          }
+        });
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -1272,6 +1329,69 @@ function App() {
     setAccentColor(normalizeHex(newColor));
   };
 
+  // AI Agent action integration handlers
+  const handleSearchPromptsFromAI = (query: string) => {
+    const q = query.toLowerCase();
+    const normalized = normalizeForSearch(query);
+    const categoryNameById = new Map(categories.map(category => [category.id, category.name]));
+    return prompts.filter(p => 
+      p.title.toLowerCase().includes(q) ||
+      (p.description && p.description.toLowerCase().includes(q)) ||
+      p.content.toLowerCase().includes(q) ||
+      p.tags.some(tag => tag.toLowerCase().includes(q)) ||
+      p.model.toLowerCase().includes(q) ||
+      (p.categoryId !== null && isCategoryNameMatch(categoryNameById.get(p.categoryId) || '', normalized))
+    );
+  };
+
+  const handleCreatePromptFromAI = async (promptData: Partial<Prompt> & { title: string; content: string }) => {
+    await handleSavePrompt(promptData);
+  };
+
+  const handleDeletePromptFromAI = async (id: string) => {
+    if (window.api && window.api.deletePrompt) {
+      const data = await window.api.deletePrompt(id);
+      setPrompts(data.prompts || []);
+      setCategories(data.categories || []);
+      setDeletedPrompts(data.deletedPrompts || []);
+      triggerNotification('Prompt template moved to Recycle Bin.');
+    } else {
+      setPrompts(prev => prev.filter(p => p.id !== id));
+      triggerNotification('Template deleted.');
+    }
+  };
+
+  const handleCreateCategoryFromAI = async (catData: Partial<Category> & { name: string }) => {
+    await handleAddCategory(catData);
+  };
+
+  const handleDeleteCategoryFromAI = async (id: string) => {
+    if (window.api && window.api.deleteCategory) {
+      const data = await window.api.deleteCategory(id);
+      setPrompts(data.prompts || []);
+      setCategories(data.categories || []);
+      setDeletedPrompts(data.deletedPrompts || []);
+      triggerNotification('Category deleted.');
+    } else {
+      setCategories(prev => prev.filter(c => c.id !== id));
+      setPrompts(prev => prev.map(p => p.categoryId === id ? { ...p, categoryId: null } : p));
+      triggerNotification('Category deleted locally.');
+    }
+  };
+
+  const handleSetThemeFromAI = (mode: 'light' | 'dark', accent?: string) => {
+    setThemeMode(mode);
+    if (accent) {
+      setAccentColor(normalizeHex(accent));
+    }
+  };
+
+  const handleSaveAiSettings = (newSettings: AIAgentSettings) => {
+    setAiSettings(newSettings);
+    localStorage.setItem('promptvault-ai-agent-settings', JSON.stringify(newSettings));
+    triggerNotification('AI settings saved successfully.');
+  };
+
   // Model statistics calculation
   const totalPrompts = prompts.length;
   const favoriteCount = prompts.filter(p => p.isFavorite).length;
@@ -1284,20 +1404,12 @@ function App() {
         themeMode={themeMode}
         accentColor={accentColor}
         settingsOpen={isThemeSettingsOpen}
-        updateInfo={updateInfo}
-        isCheckingForUpdates={isCheckingForUpdates}
-        isUpdatingVault={isUpdatingVault}
-        downloadProgress={downloadProgress}
-        installLaunching={installLaunching}
-        installError={installError}
         onToggleTheme={handleToggleTheme}
         onToggleSettings={() => setIsThemeSettingsOpen(prev => !prev)}
-        onCloseSettings={() => setIsThemeSettingsOpen(false)}
-        onAccentColorChange={handleAccentColorChange}
-        onCheckForUpdates={() => void checkForUpdates(false)}
-        onUpdateNow={() => void handleUpdateNow()}
         onOpenCalendar={() => setCalendarOpen(true)}
         onOpenRecycleBin={() => setRecycleBinOpen(true)}
+        aiAgentOpen={isAIAgentOpen}
+        onToggleAIAgent={() => setIsAIAgentOpen(prev => !prev)}
       />
 
       {/* Update Download / Install Modal */}
@@ -1388,9 +1500,26 @@ function App() {
               
               <input
                 type="text"
-                placeholder="Search prompt titles, tags (#midjourney), descriptions, or model specifications..."
+                placeholder="Search prompt titles, tags (#midjourney), descriptions, or model specifications... (or type > to ask AI)"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && searchQuery.trim().startsWith('>')) {
+                    e.preventDefault();
+                    const query = searchQuery.trim().substring(1).trim();
+                    if (query) {
+                      const userMsg: ChatMessage = {
+                        id: Math.random().toString(36).substring(2, 9),
+                        sender: 'user',
+                        text: query,
+                        timestamp: Date.now()
+                      };
+                      setChatMessages(prev => [...prev, userMsg]);
+                      setIsAIAgentOpen(true);
+                      setSearchQuery('');
+                    }
+                  }
+                }}
                 className="flex-1 bg-transparent text-sm text-obsidian-100 placeholder-obsidian-600 focus:outline-none"
               />
 
@@ -1539,6 +1668,43 @@ function App() {
             onSave={handleAddCategory}
           />
         )}
+
+        <SettingsModal
+          isOpen={isThemeSettingsOpen}
+          onClose={() => setIsThemeSettingsOpen(false)}
+          themeMode={themeMode}
+          onToggleTheme={handleToggleTheme}
+          accentColor={accentColor}
+          onAccentColorChange={handleAccentColorChange}
+          aiSettings={aiSettings}
+          onSaveAiSettings={handleSaveAiSettings}
+          updateInfo={updateInfo}
+          isCheckingForUpdates={isCheckingForUpdates}
+          isUpdatingVault={isUpdatingVault}
+          downloadProgress={downloadProgress}
+          installLaunching={installLaunching}
+          installError={installError}
+          onCheckForUpdates={() => void checkForUpdates(false)}
+          onUpdateNow={() => void handleUpdateNow()}
+        />
+
+        <AIAgentPanel
+          isOpen={isAIAgentOpen}
+          onClose={() => setIsAIAgentOpen(false)}
+          prompts={prompts}
+          categories={categories}
+          themeMode={themeMode}
+          accentColor={accentColor}
+          onSearchPrompts={handleSearchPromptsFromAI}
+          onCreatePrompt={handleCreatePromptFromAI}
+          onDeletePrompt={handleDeletePromptFromAI}
+          onCreateCategory={handleCreateCategoryFromAI}
+          onDeleteCategory={handleDeleteCategoryFromAI}
+          onSetTheme={handleSetThemeFromAI}
+          aiSettings={aiSettings}
+          chatMessages={chatMessages}
+          setChatMessages={setChatMessages}
+        />
 
       </div>
     </div>

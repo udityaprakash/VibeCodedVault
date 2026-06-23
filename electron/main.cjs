@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const http = require('http');
 const { spawn } = require('child_process');
 const { Readable } = require('stream');
 
@@ -952,6 +953,308 @@ ipcMain.handle('dialog-confirm', async (event, { message, detail, buttons, type 
     return response === 0;
   } catch (e) {
     console.error('Failed to show native confirm dialog:', e);
+    return false;
+  }
+});
+
+// MCP Local HTTP Server instance state
+let mcpServerInstance = null;
+let mcpServerPort = 3015;
+
+function stopMcpServer() {
+  if (mcpServerInstance) {
+    mcpServerInstance.close();
+    mcpServerInstance = null;
+    console.log('MCP HTTP Server stopped.');
+  }
+}
+
+function startMcpServer(port) {
+  stopMcpServer();
+  mcpServerPort = port;
+
+  mcpServerInstance = http.createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const request = JSON.parse(body);
+          const response = await handleMcpRequest(request);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(response));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32700, message: "Parse error" },
+            id: null
+          }));
+        }
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/status') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'running', port: mcpServerPort }));
+      return;
+    }
+
+    res.writeHead(404);
+    res.end();
+  });
+
+  mcpServerInstance.listen(mcpServerPort, () => {
+    console.log(`MCP HTTP Server listening on port ${mcpServerPort}`);
+  }).on('error', (err) => {
+    console.error('MCP Server start error:', err);
+  });
+}
+
+async function handleMcpRequest(req) {
+  const { method, params, id } = req;
+  if (method === 'tools/list') {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: {
+        tools: [
+          {
+            name: "list_prompts",
+            description: "Get all prompt templates currently stored in PromptVault.",
+            inputSchema: { type: "object", properties: {} }
+          },
+          {
+            name: "search_prompts",
+            description: "Find prompts matching a search query using text search.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                query: { type: "string", description: "Search query" }
+              },
+              required: ["query"]
+            }
+          },
+          {
+            name: "create_prompt",
+            description: "Create a new prompt template in the workspace database.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                description: { type: "string" },
+                content: { type: "string" },
+                model: { type: "string", description: "Target AI Model compatibility tag" },
+                tags: { type: "array", items: { type: "string" }, description: "Tags list" },
+                categoryId: { type: "string", description: "Optional category ID" }
+              },
+              required: ["title", "description", "content"]
+            }
+          },
+          {
+            name: "delete_prompt",
+            description: "Delete a prompt template by ID, moving it to the Recycle Bin.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                promptId: { type: "string" }
+              },
+              required: ["promptId"]
+            }
+          },
+          {
+            name: "list_categories",
+            description: "Get all categories in the workspace database.",
+            inputSchema: { type: "object", properties: {} }
+          },
+          {
+            name: "create_category",
+            description: "Create a new category in the workspace database.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                color: { type: "string", description: "Hex color code" },
+                icon: { type: "string", description: "Preset icon name (e.g. Code, Image, Zap, Target)" }
+              },
+              required: ["name"]
+            }
+          },
+          {
+            name: "delete_category",
+            description: "Delete a category by ID.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                categoryId: { type: "string" }
+              },
+              required: ["categoryId"]
+            }
+          },
+          {
+            name: "set_theme",
+            description: "Change theme mode (light/dark) or accent color of the desktop application.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                mode: { type: "string", enum: ["light", "dark"] },
+                accentColor: { type: "string", description: "Hex color code" }
+              }
+            }
+          }
+        ]
+      }
+    };
+  }
+
+  if (method === 'tools/call') {
+    const { name, arguments: args } = params || {};
+    let resultText = '';
+
+    try {
+      if (name === 'list_prompts') {
+        const db = readDatabase();
+        resultText = JSON.stringify(db.prompts || []);
+      } else if (name === 'search_prompts') {
+        const db = readDatabase();
+        const q = (args.query || '').toLowerCase();
+        const matches = (db.prompts || []).filter(p =>
+          p.title.toLowerCase().includes(q) ||
+          (p.description && p.description.toLowerCase().includes(q)) ||
+          p.content.toLowerCase().includes(q)
+        );
+        resultText = JSON.stringify(matches);
+      } else if (name === 'create_prompt') {
+        const db = readDatabase();
+        const now = Date.now();
+        const newPrompt = {
+          id: 'p_' + Math.random().toString(36).substr(2, 9),
+          title: args.title,
+          description: args.description,
+          content: args.content,
+          model: args.model || 'General',
+          tags: args.tags || [],
+          categoryId: args.categoryId || null,
+          version: 1,
+          versions: [
+            { id: `p-v1-${now}`, version: 1, timestamp: now, content: args.content }
+          ],
+          createdAt: now,
+          updatedAt: now,
+          usageCount: 0,
+          isPinned: false,
+          isFavorite: false
+        };
+        db.prompts.push(newPrompt);
+        writeDatabase(db);
+        if (mainWindow) mainWindow.webContents.send('db-updated');
+        resultText = JSON.stringify({ success: true, prompt: newPrompt });
+      } else if (name === 'delete_prompt') {
+        const db = readDatabase();
+        const promptIndex = db.prompts.findIndex(p => p.id === args.promptId);
+        if (promptIndex !== -1) {
+          const [promptToDelete] = db.prompts.splice(promptIndex, 1);
+          if (!db.deletedPrompts) db.deletedPrompts = [];
+          db.deletedPrompts = db.deletedPrompts.filter(p => p.id !== args.promptId);
+          db.deletedPrompts.push({
+            ...promptToDelete,
+            deletedAt: Date.now()
+          });
+          writeDatabase(db);
+          if (mainWindow) mainWindow.webContents.send('db-updated');
+          resultText = JSON.stringify({ success: true });
+        } else {
+          resultText = JSON.stringify({ success: false, error: 'Prompt not found' });
+        }
+      } else if (name === 'list_categories') {
+        const db = readDatabase();
+        resultText = JSON.stringify(db.categories || []);
+      } else if (name === 'create_category') {
+        const db = readDatabase();
+        const sanitizedName = (args.name || '').trim().slice(0, 30);
+        const newCategory = {
+          id: 'c_' + Math.random().toString(36).substr(2, 9),
+          name: sanitizedName,
+          color: args.color || '#8B5CF6',
+          icon: args.icon || 'Zap',
+          switches: []
+        };
+        db.categories.push(newCategory);
+        writeDatabase(db);
+        if (mainWindow) mainWindow.webContents.send('db-updated');
+        resultText = JSON.stringify({ success: true, category: newCategory });
+      } else if (name === 'delete_category') {
+        const db = readDatabase();
+        db.categories = db.categories.filter(c => c.id !== args.categoryId);
+        db.prompts = db.prompts.map(p => p.categoryId === args.categoryId ? { ...p, categoryId: null } : p);
+        writeDatabase(db);
+        if (mainWindow) mainWindow.webContents.send('db-updated');
+        resultText = JSON.stringify({ success: true });
+      } else if (name === 'set_theme') {
+        if (mainWindow) {
+          mainWindow.webContents.send('set-theme-mode', {
+            mode: args.mode,
+            accentColor: args.accentColor
+          });
+        }
+        resultText = JSON.stringify({ success: true });
+      } else {
+        return {
+          jsonrpc: "2.0",
+          id,
+          error: { code: -32601, message: `Method not found: ${name}` }
+        };
+      }
+
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: resultText
+            }
+          ]
+        }
+      };
+    } catch (err) {
+      return {
+        jsonrpc: "2.0",
+        id,
+        error: { code: -32603, message: String(err) }
+      };
+    }
+  }
+
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: { code: -32601, message: "Method not found" }
+  };
+}
+
+ipcMain.handle('update-ai-agent-settings', async (event, settings) => {
+  try {
+    if (settings && settings.serverEnabled && settings.enabled) {
+      startMcpServer(settings.serverPort || 3015);
+    } else {
+      stopMcpServer();
+    }
+    return true;
+  } catch (e) {
+    console.error('Failed to update AI Agent Settings:', e);
     return false;
   }
 });

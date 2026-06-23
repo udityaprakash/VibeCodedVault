@@ -1,13 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Download, Minus, Moon, Plus, RefreshCw, Settings2, Square, Sun, Tag, Trash2, X, Calendar } from 'lucide-react';
-import {
-  PRESET_MODELS,
-  getCustomModels,
-  normalizeModelName,
-  resolveExistingModelName,
-  saveCustomModels,
-} from '../utils/aiModels';
-import type { UpdateInfo } from '../types';
+import React from 'react';
+import { Minus, Moon, Settings2, Square, Sun, Trash2, X, Calendar, Bot } from 'lucide-react';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -15,100 +7,24 @@ interface TitleBarProps {
   themeMode: ThemeMode;
   accentColor: string;
   settingsOpen: boolean;
-  updateInfo: UpdateInfo | null;
-  isCheckingForUpdates: boolean;
-  isUpdatingVault: boolean;
-  downloadProgress?: number | null;
-  installLaunching?: boolean;
-  installError?: string | null;
   onToggleTheme: () => void;
   onToggleSettings: () => void;
-  onAccentColorChange: (color: string) => void;
-  onCloseSettings: () => void;
-  onCheckForUpdates: () => void;
-  onUpdateNow: () => void;
   onOpenCalendar: () => void;
   onOpenRecycleBin: () => void;
+  aiAgentOpen: boolean;
+  onToggleAIAgent: () => void;
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
   themeMode,
-  accentColor,
   settingsOpen,
-  updateInfo,
-  isCheckingForUpdates,
-  isUpdatingVault,
-  downloadProgress = null,
-  installLaunching = false,
-  installError = null,
   onToggleTheme,
   onToggleSettings,
-  onAccentColorChange,
-  onCloseSettings,
-  onCheckForUpdates,
-  onUpdateNow,
   onOpenCalendar,
   onOpenRecycleBin,
+  aiAgentOpen,
+  onToggleAIAgent,
 }) => {
-  const [errorDetails, setErrorDetails] = useState<string | null>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const settingsRef = useRef<HTMLDivElement | null>(null);
-  const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
-  const [customModels, setCustomModels] = useState<string[]>(() => getCustomModels());
-  const [customModelInput, setCustomModelInput] = useState('');
-
-  useEffect(() => {
-    if (!settingsOpen) {
-      return;
-    }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (settingsRef.current && !settingsRef.current.contains(target)) {
-        onCloseSettings();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onCloseSettings, settingsOpen]);
-
-  useEffect(() => {
-    if (!settingsOpen) {
-      setIsModelManagerOpen(false);
-      setCustomModelInput('');
-    }
-  }, [settingsOpen]);
-
-  useEffect(() => {
-    if (settingsOpen) {
-      setCustomModels(getCustomModels());
-    }
-  }, [settingsOpen, isModelManagerOpen]);
-
-  const handleAddCustomModel = () => {
-    const normalized = normalizeModelName(customModelInput);
-    if (!normalized) {
-      return;
-    }
-
-    const existing = resolveExistingModelName(normalized, customModels);
-    if (existing) {
-      setCustomModelInput('');
-      return;
-    }
-
-    const nextModels = saveCustomModels([...customModels, normalized]);
-    setCustomModels(nextModels);
-    setCustomModelInput('');
-  };
-
-  const handleRemoveCustomModel = (modelName: string) => {
-    const nextModels = customModels.filter(item => item.toLowerCase() !== modelName.toLowerCase());
-    const persisted = saveCustomModels(nextModels);
-    setCustomModels(persisted);
-  };
-
   const handleMinimize = () => {
     if (window.api && window.api.minimize) {
       window.api.minimize();
@@ -145,7 +61,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
       {/* Title Windows Controls */}
-      <div className="titlebar-nodrag flex items-center h-full relative" ref={settingsRef}>
+      <div className="titlebar-nodrag flex items-center h-full relative">
         <button
           onClick={onOpenCalendar}
           className="h-7 w-7 mr-1.5 rounded-full border border-obsidian-800 bg-obsidian-900/85 text-obsidian-400 hover:text-obsidian-100 hover:border-cyber-cyan/50 flex items-center justify-center transition-all duration-200"
@@ -188,230 +104,27 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               ? 'border-cyber-violet/60 bg-cyber-violet/15 text-cyber-violet'
               : 'border-obsidian-800 bg-obsidian-900/85 text-obsidian-400 hover:text-obsidian-100 hover:border-cyber-violet/50'
           }`}
-          title="Theme settings"
-          aria-label="Open theme settings"
+          title="Theme & AI Settings"
+          aria-label="Open settings modal"
         >
           <Settings2 size={13} />
         </button>
-
-        {settingsOpen && (
-          <div className="absolute top-[44px] right-[136px] w-[18rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md p-3 shadow-2xl z-[100]">
-            <div className="text-[10px] uppercase tracking-widest text-obsidian-500 mb-2">Theme Studio</div>
-
-            <div className="flex items-center gap-2 mb-3">
-              <button
-                onClick={() => themeMode === 'light' || onToggleTheme()}
-                className={`flex-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                  themeMode === 'light'
-                    ? 'border-cyber-violet/60 bg-cyber-violet/15 text-cyber-violet'
-                    : 'border-obsidian-800 bg-obsidian-900 text-obsidian-300 hover:border-cyber-violet/40'
-                }`}
-              >
-                Light
-              </button>
-              <button
-                onClick={() => themeMode === 'dark' || onToggleTheme()}
-                className={`flex-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                  themeMode === 'dark'
-                    ? 'border-cyber-violet/60 bg-cyber-violet/15 text-cyber-violet'
-                    : 'border-obsidian-800 bg-obsidian-900 text-obsidian-300 hover:border-cyber-violet/40'
-                }`}
-              >
-                Dark
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[10px] text-obsidian-500 uppercase tracking-wider">Accent Color</div>
-                <div className="text-[11px] text-obsidian-300">Pick from color dial</div>
-              </div>
-              <label
-                className="relative block h-9 w-9 rounded-full border-2 border-obsidian-700 shadow-inner cursor-pointer overflow-hidden"
-                style={{ backgroundColor: accentColor }}
-                title="Select accent color"
-              >
-                <input
-                  type="color"
-                  value={accentColor}
-                  onChange={(event) => onAccentColorChange(event.target.value)}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  aria-label="Pick theme accent color"
-                />
-              </label>
-            </div>
-
-            <div className="mt-3 pt-3 border-t border-obsidian-850/70">
-              <button
-                onClick={() => setIsModelManagerOpen(prev => !prev)}
-                className="w-full flex items-center justify-between rounded-lg border border-obsidian-800 bg-obsidian-900 px-2.5 py-2 text-[11px] text-obsidian-300 hover:border-cyber-violet/45 transition-colors"
-              >
-                <span className="flex items-center gap-1.5 font-semibold">
-                  <Tag size={12} className="text-cyber-cyan" />
-                  Compatibility
-                </span>
-                <span className="text-[10px] text-obsidian-500">{PRESET_MODELS.length + customModels.length}</span>
-              </button>
-            </div>
-
-            {isModelManagerOpen && (
-              <div className="absolute top-[44px] right-[252px] w-72 rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-md p-3 shadow-2xl z-[110]">
-                <div className="text-[10px] uppercase tracking-widest text-obsidian-500 mb-2">Compatibility</div>
-
-                <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
-                  {PRESET_MODELS.map(modelName => (
-                    <div
-                      key={modelName}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-obsidian-850 bg-obsidian-900/70 px-2 py-1.5"
-                    >
-                      <span className="text-[11px] text-obsidian-300 truncate">{modelName}</span>
-                      <span className="text-[9px] uppercase tracking-wider text-obsidian-500">Preset</span>
-                    </div>
-                  ))}
-
-                  {customModels.length === 0 && (
-                    <div className="text-[11px] text-obsidian-500 px-1 py-2">No custom compatibility tags added yet.</div>
-                  )}
-
-                  {customModels.map(modelName => (
-                    <div
-                      key={modelName}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-obsidian-800 bg-obsidian-900 px-2 py-1.5"
-                    >
-                      <span className="text-[11px] text-obsidian-200 truncate">{modelName}</span>
-                      <button
-                        onClick={() => handleRemoveCustomModel(modelName)}
-                        className="p-1 rounded-md text-obsidian-500 hover:text-cyber-rose hover:bg-cyber-rose/10 transition-colors"
-                        title="Delete compatibility tag"
-                        aria-label={`Delete ${modelName}`}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-3 flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={customModelInput}
-                    onChange={(event) => setCustomModelInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        handleAddCustomModel();
-                      }
-                    }}
-                    placeholder="Add custom compatibility tag"
-                    className="flex-1 bg-obsidian-900 border border-obsidian-800 rounded-lg px-2.5 py-2 text-[11px] text-obsidian-300 focus-glow-violet"
-                  />
-                  <button
-                    onClick={handleAddCustomModel}
-                    className="inline-flex items-center gap-1 rounded-lg border border-cyber-violet/40 bg-cyber-violet/15 px-2.5 py-2 text-[10px] uppercase tracking-wider font-bold text-cyber-violet hover:bg-cyber-violet/25 transition-colors"
-                  >
-                    <Plus size={11} />
-                    Add
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-3 pt-3 border-t border-obsidian-850/70">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div>
-                  <div className="text-[10px] uppercase tracking-widest text-obsidian-500">Vault Updates</div>
-                  <div className="text-[11px] text-obsidian-400">
-                    {updateInfo ? `v${updateInfo.latestVersion} available` : 'Check GitHub releases for new builds'}
-                  </div>
-                </div>
-                <button
-                  onClick={onCheckForUpdates}
-                  disabled={isCheckingForUpdates}
-                  className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900 px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold text-obsidian-300 hover:border-cyber-violet/45 hover:text-obsidian-100 transition-colors disabled:opacity-60"
-                >
-                  <RefreshCw size={11} className={isCheckingForUpdates ? 'animate-spin' : ''} />
-                  {isCheckingForUpdates ? 'Checking' : 'Check now'}
-                </button>
-              </div>
-
-              {updateInfo ? (
-                <div className="rounded-lg border border-cyber-violet/30 bg-cyber-violet/10 p-2.5 overflow-hidden">
-                  <div className="flex flex-col gap-2 min-w-0">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between min-w-0">
-                    <div>
-                      <div className="text-[11px] font-semibold text-cyber-violet">Update available</div>
-                      <div className="text-[10px] text-obsidian-500">
-                        Current v{updateInfo.currentVersion} → Latest v{updateInfo.latestVersion}
-                      </div>
-                    </div>
-                    <button
-                      onClick={onUpdateNow}
-                      disabled={isUpdatingVault}
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg border border-cyber-violet/40 bg-cyber-violet/15 px-2.5 py-2 text-[10px] uppercase tracking-wider font-bold text-cyber-violet hover:bg-cyber-violet/25 transition-colors disabled:opacity-60 max-w-full"
-                    >
-                      <Download size={11} />
-                      {isUpdatingVault ? 'Updating' : 'Update Vault now'}
-                    </button>
-                    </div>
-
-                    {/* Inline download / install status */}
-                    {(downloadProgress !== null && downloadProgress < 100) && (
-                      <div className="w-full">
-                        <div className="h-2 w-full rounded bg-obsidian-800 overflow-hidden">
-                          <div className="h-full bg-cyber-violet transition-all" style={{ width: `${downloadProgress}%` }} />
-                        </div>
-                        <div className="text-[10px] text-obsidian-400 mt-1">Downloading update — {downloadProgress}%</div>
-                      </div>
-                    )}
-
-                    {installLaunching && (
-                      <div className="w-full flex items-center gap-2 text-[10px] text-obsidian-400">
-                        <RefreshCw size={12} className="animate-spin" />
-                        <span>Launching installer…</span>
-                      </div>
-                    )}
-
-                    {installError && (
-                      <div className="w-full">
-                        <div className="text-[10px] text-cyber-rose">{installError}</div>
-                        <div className="mt-1">
-                          <button
-                            onClick={async () => {
-                              if (!window.api?.getInstallErrorLog) return;
-                              try {
-                                setLoadingDetails(true);
-                                const txt = await window.api.getInstallErrorLog();
-                                setErrorDetails(txt || 'No further details available.');
-                              } catch (e) {
-                                setErrorDetails('Failed to read error details.');
-                              } finally {
-                                setLoadingDetails(false);
-                              }
-                            }}
-                            className="text-[10px] underline text-obsidian-300 hover:text-obsidian-100"
-                          >
-                            {loadingDetails ? 'Loading details…' : 'Show details'}
-                          </button>
-                        </div>
-                        {errorDetails && (
-                          <pre className="mt-2 max-h-40 overflow-auto text-[11px] p-2 rounded bg-obsidian-900 border border-obsidian-800 text-obsidian-300 whitespace-pre-wrap">{errorDetails}</pre>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {updateInfo.releaseName && (
-                    <div className="mt-1.5 text-[10px] text-obsidian-500 truncate" style={{ maxWidth: '100%' }}>{updateInfo.releaseName}</div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-[10px] text-obsidian-500">Auto-check runs on launch and every few hours.</div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="titlebar-nodrag flex items-center h-full">
+        <button
+          onClick={onToggleAIAgent}
+          className={`h-7 w-7 mr-2 rounded-full border flex items-center justify-center transition-all duration-250 ${
+            aiAgentOpen
+              ? 'border-cyber-violet/60 bg-cyber-violet/15 text-cyber-violet shadow-glow-violet'
+              : 'border-obsidian-800 bg-obsidian-900/85 text-obsidian-400 hover:text-obsidian-100 hover:border-cyber-violet/50'
+          }`}
+          title="Open AI Assistant"
+          aria-label="Toggle AI Assistant"
+        >
+          <Bot size={13} />
+        </button>
+
         <button 
           onClick={handleMinimize}
           className="h-full px-4 flex items-center justify-center text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 cursor-pointer transition-colors duration-150"

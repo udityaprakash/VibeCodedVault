@@ -37,4 +37,7 @@ contextBridge.exposeInMainWorld('api', {
   installUpdate: () => ipcRenderer.invoke('app-install-update'),
   getInstallErrorLog: () => ipcRenderer.invoke('app-get-install-error-log'),
   confirm: (options) => ipcRenderer.invoke('dialog-confirm', options),
+  updateAiAgentSettings: (settings) => ipcRenderer.invoke('update-ai-agent-settings', settings),
+  onDbUpdated: (cb) => ipcRenderer.on('db-updated', () => cb()),
+  onSetThemeMode: (cb) => ipcRenderer.on('set-theme-mode', (evt, payload) => cb(payload)),
 });

@@ -93,6 +93,26 @@ export interface IElectronAPI {
   onUpdateInstallError: (cb: (err: any) => void) => void;
   getInstallErrorLog: () => Promise<string | null>;
   confirm: (options: { message: string; detail?: string; buttons?: string[]; type?: string }) => Promise<boolean>;
+  updateAiAgentSettings: (settings: AIAgentSettings) => Promise<boolean>;
+  onDbUpdated: (cb: () => void) => void;
+  onSetThemeMode: (cb: (payload: { mode: 'light' | 'dark'; accentColor?: string }) => void) => void;
+}
+
+export interface AIAgentSettings {
+  enabled: boolean;
+  provider: 'gemini' | 'openai';
+  apiKey: string;
+  serverEnabled: boolean;
+  serverPort: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'agent' | 'system-tool';
+  text: string;
+  timestamp: number;
+  toolCallName?: string;
+  toolCallStatus?: 'running' | 'success' | 'error';
 }
 
 declare global {
