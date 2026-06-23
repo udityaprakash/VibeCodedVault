@@ -6,14 +6,13 @@ import {
 } from 'lucide-react';
 import type { Category } from '../types';
 import { CategoryIcon } from './CategoryIcon';
-import { CategoryModal } from './CategoryModal';
 
 interface SidebarProps {
   appVersion: string;
   categories: Category[];
   selectedCategoryId: string | null; // 'all', 'favorites', 'pinned', or a category UUID
   onSelectCategory: (id: string | null) => void;
-  onAddCategory: (category: Partial<Category> & { name: string }) => void;
+  onOpenCategoryModal: () => void;
   onDeleteCategory: (id: string) => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
@@ -25,14 +24,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   categories,
   selectedCategoryId,
   onSelectCategory,
-  onAddCategory,
+  onOpenCategoryModal,
   onDeleteCategory,
   onExportBackup,
   onImportBackup,
   onOpenRecycleBin
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   return (
     <aside 
@@ -123,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {!isCollapsed && <h3 className="text-[11px] font-bold text-obsidian-400 uppercase tracking-widest">Categories</h3>}
             {!isCollapsed && (
               <button 
-                onClick={() => setIsCategoryModalOpen(true)}
+                onClick={onOpenCategoryModal}
                 className="text-obsidian-400 hover:text-cyber-violet cursor-pointer transition-colors duration-150"
                 title="Create Category"
               >
@@ -202,12 +200,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Category Creation Modal overlay */}
-      <CategoryModal
-        isOpen={isCategoryModalOpen}
-        onClose={() => setIsCategoryModalOpen(false)}
-        onSave={onAddCategory}
-      />
     </aside>
   );
 };

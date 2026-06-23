@@ -7,6 +7,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { BackupDialog } from './components/BackupDialog';
 import { RecycleBin } from './components/RecycleBin';
 import { CalendarView } from './components/CalendarView';
+import { CategoryModal } from './components/CategoryModal';
 import type { Category, Prompt, DatabaseData, UpdateInfo, RawSwitchData } from './types';
 import { 
   Search, Terminal, Plus, Zap, Bookmark, AlertTriangle, Layers
@@ -417,6 +418,7 @@ function App() {
   
   // Command Palette state
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   // Status Alerts notifications
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -1348,7 +1350,7 @@ function App() {
           categories={categories}
           selectedCategoryId={selectedCategoryId}
           onSelectCategory={setSelectedCategoryId}
-          onAddCategory={handleAddCategory}
+          onOpenCategoryModal={() => setIsCategoryModalOpen(true)}
           onDeleteCategory={handleDeleteCategory}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
@@ -1527,6 +1529,14 @@ function App() {
             onClose={() => setCalendarOpen(false)}
             prompts={prompts}
             categories={categories}
+          />
+        )}
+
+        {isCategoryModalOpen && (
+          <CategoryModal
+            isOpen={isCategoryModalOpen}
+            onClose={() => setIsCategoryModalOpen(false)}
+            onSave={handleAddCategory}
           />
         )}
 
