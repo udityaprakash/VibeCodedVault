@@ -52,8 +52,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </button>
 
       {/* App Header Branding */}
-      <div className={`titlebar-drag pb-4 flex items-center ${isCollapsed ? 'justify-center gap-0 p-4 pt-5' : 'gap-3 p-6'}`}>
-        <div className="titlebar-nodrag flex items-center justify-center w-8 h-8 shrink-0 rounded-lg bg-gradient-cyber shadow-glow-violet">
+      <div className={`pb-4 flex items-center ${isCollapsed ? 'justify-center gap-0 p-4 pt-5' : 'gap-3 p-6'}`}>
+        <div className="flex items-center justify-center w-8 h-8 shrink-0 rounded-lg bg-gradient-cyber shadow-glow-violet">
           <Zap className="text-white" size={16} />
         </div>
         {!isCollapsed && (

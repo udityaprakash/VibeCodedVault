@@ -92,6 +92,7 @@ export interface IElectronAPI {
   onUpdateInstallStarted: (cb: (info: any) => void) => void;
   onUpdateInstallError: (cb: (err: any) => void) => void;
   getInstallErrorLog: () => Promise<string | null>;
+  confirm: (options: { message: string; detail?: string; buttons?: string[]; type?: string }) => Promise<boolean>;
 }
 
 declare global {

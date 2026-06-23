@@ -935,3 +935,23 @@ ipcMain.handle('app-get-install-error-log', async () => {
     return null;
   }
 });
+
+// Native non-blocking confirm dialog helper
+ipcMain.handle('dialog-confirm', async (event, { message, detail, buttons, type }) => {
+  if (!mainWindow) return false;
+  try {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: type || 'question',
+      buttons: buttons || ['Yes', 'No'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Confirm Action',
+      message,
+      detail
+    });
+    return response === 0;
+  } catch (e) {
+    console.error('Failed to show native confirm dialog:', e);
+    return false;
+  }
+});

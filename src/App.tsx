@@ -766,6 +766,13 @@ function App() {
     }
   };
 
+  const showConfirm = async (message: string, detail?: string): Promise<boolean> => {
+    if (window.api && window.api.confirm) {
+      return await window.api.confirm({ message, detail });
+    }
+    return window.confirm(message + (detail ? `\n\n${detail}` : ''));
+  };
+
   const handleRestorePrompt = async (promptId: string) => {
     try {
       if (window.api && window.api.restorePrompt) {
@@ -908,7 +915,8 @@ function App() {
   };
 
   const handleDeletePrompt = async (promptId: string) => {
-    if (!confirm('Are you sure you want to move this template to the Recycle Bin?')) return;
+    const confirmed = await showConfirm('Are you sure you want to move this template to the Recycle Bin?');
+    if (!confirmed) return;
     try {
       if (window.api && window.api.deletePrompt) {
         const data = await window.api.deletePrompt(promptId);
@@ -966,7 +974,11 @@ function App() {
     const cat = categories.find(c => c.id === categoryId);
     if (!cat) return;
     
-    if (!confirm(`Are you sure you want to delete category "${cat.name}"? Any prompts inside will be re-grouped as uncategorized.`)) return;
+    const confirmed = await showConfirm(
+      `Are you sure you want to delete category "${cat.name}"?`,
+      'Any prompts inside will be re-grouped as uncategorized.'
+    );
+    if (!confirmed) return;
 
     try {
       if (window.api && window.api.deleteCategory) {
@@ -1505,6 +1517,7 @@ function App() {
             onRestore={handleRestorePrompt}
             onDeletePermanently={handleDeletePromptPermanently}
             onEmptyTrash={handleEmptyTrash}
+            showConfirm={showConfirm}
           />
         )}
 

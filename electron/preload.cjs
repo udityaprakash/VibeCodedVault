@@ -36,4 +36,5 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateInstallError: (cb) => ipcRenderer.on('update-install-error', (evt, err) => cb(err)),
   installUpdate: () => ipcRenderer.invoke('app-install-update'),
   getInstallErrorLog: () => ipcRenderer.invoke('app-get-install-error-log'),
+  confirm: (options) => ipcRenderer.invoke('dialog-confirm', options),
 });

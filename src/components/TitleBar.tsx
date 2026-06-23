@@ -409,7 +409,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             </div>
           </div>
         )}
+      </div>
 
+      <div className="titlebar-nodrag flex items-center h-full">
         <button 
           onClick={handleMinimize}
           className="h-full px-4 flex items-center justify-center text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 cursor-pointer transition-colors duration-150"

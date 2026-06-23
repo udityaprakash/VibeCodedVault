@@ -9,6 +9,7 @@ interface RecycleBinProps {
   onRestore: (promptId: string) => void;
   onDeletePermanently: (promptId: string) => void;
   onEmptyTrash: () => void;
+  showConfirm: (message: string, detail?: string) => Promise<boolean>;
 }
 
 export const RecycleBin: React.FC<RecycleBinProps> = ({
@@ -17,18 +18,24 @@ export const RecycleBin: React.FC<RecycleBinProps> = ({
   deletedPrompts = [],
   onRestore,
   onDeletePermanently,
-  onEmptyTrash
+  onEmptyTrash,
+  showConfirm
 }) => {
   if (!isOpen) return null;
 
-  const handleEmptyBin = () => {
-    if (confirm('Are you sure you want to permanently delete all prompts in the Recycle Bin? This action is irreversible.')) {
+  const handleEmptyBin = async () => {
+    const confirmed = await showConfirm(
+      'Are you sure you want to permanently delete all prompts in the Recycle Bin?',
+      'This action is irreversible.'
+    );
+    if (confirmed) {
       onEmptyTrash();
     }
   };
 
-  const handleDeletePermanently = (promptId: string, title: string) => {
-    if (confirm(`Are you sure you want to permanently delete "${title}"?`)) {
+  const handleDeletePermanently = async (promptId: string, title: string) => {
+    const confirmed = await showConfirm(`Are you sure you want to permanently delete "${title}"?`);
+    if (confirmed) {
       onDeletePermanently(promptId);
     }
   };
