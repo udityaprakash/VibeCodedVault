@@ -3,6 +3,7 @@ import { X, Send, Bot, User, Cpu, RefreshCw, Trash2, Maximize2, Minimize2, Spark
 import type { AIAgentSettings, ChatMessage, Prompt, Category } from '../types';
 import { runAgentCycle } from '../utils/aiAgent';
 import type { AgentContext } from '../utils/aiAgent';
+import { resolveAiModelName, getSupportedModelsForProvider } from '../utils/aiModels';
 
 interface AIAgentPanelProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface AIAgentPanelProps {
   onDeleteCategory: (id: string) => Promise<void>;
   onSetTheme: (mode: 'light' | 'dark', accentColor?: string) => void;
   aiSettings: AIAgentSettings;
+  onSaveAiSettings: (settings: AIAgentSettings) => void;
   chatMessages: ChatMessage[];
   setChatMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
@@ -36,6 +38,7 @@ export const AIAgentPanel: React.FC<AIAgentPanelProps> = ({
   onDeleteCategory,
   onSetTheme,
   aiSettings,
+  onSaveAiSettings,
   chatMessages,
   setChatMessages
 }) => {
@@ -181,6 +184,22 @@ export const AIAgentPanel: React.FC<AIAgentPanelProps> = ({
           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-cyber-violet/20 bg-cyber-violet/5 text-cyber-violet uppercase font-semibold">
             {aiSettings.provider}
           </span>
+          <select
+            value={resolveAiModelName(aiSettings.provider, aiSettings.model)}
+            onChange={(e) => {
+              onSaveAiSettings({
+                ...aiSettings,
+                model: e.target.value
+              });
+            }}
+            className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-cyber-violet/20 bg-cyber-violet/5 text-cyber-violet font-semibold focus:outline-none focus:border-cyber-violet/50 cursor-pointer transition-colors"
+          >
+            {getSupportedModelsForProvider(aiSettings.provider).map(model => (
+              <option key={model} value={model} className="bg-obsidian-950 text-obsidian-300 font-mono">
+                {model}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex items-center gap-2.5">

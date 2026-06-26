@@ -1,4 +1,14 @@
 import type { AIAgentSettings, Prompt, Category } from '../types';
+import { resolveModelForProvider, AI_MODEL_OPTIONS } from './aiModels';
+const RETRYABLE_GEMINI_ERROR_PATTERNS = [
+  'high demand',
+  'resource exhausted',
+  'overloaded',
+  'try again later',
+  'quota',
+  'rate limit',
+  'temporarily unavailable'
+];
 
 export interface AgentContext {
   prompts: Prompt[];
@@ -133,6 +143,52 @@ function getOpenAITools() {
   });
 }
 
+function isRetryableGeminiError(status: number, errorText: string) {
+  if (status === 429 || status === 503 || status === 404) {
+    return true;
+  }
+
+  const normalizedError = errorText.toLowerCase();
+  if (normalizedError.includes('not found') || normalizedError.includes('model')) {
+    return true;
+  }
+
+  return RETRYABLE_GEMINI_ERROR_PATTERNS.some(pattern => normalizedError.includes(pattern));
+}
+
+function isOpenAiRetryableError(status: number, errorText: string) {
+  if (status === 429 || status === 503 || status === 404) {
+    return true;
+  }
+
+  const normalizedError = errorText.toLowerCase();
+  if (
+    normalizedError.includes('not found') ||
+    normalizedError.includes('model') ||
+    normalizedError.includes('does not exist')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+async function callGeminiModel(model: string, apiKey: string, contents: any[]) {
+  return fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        tools: [{ functionDeclarations: getGeminiTools() }],
+        generationConfig: { temperature: 0.1 }
+      })
+    }
+  );
+}
+
 const SYSTEM_PROMPT = `You are PromptVault Assistant, an agentic AI built inside a desktop app for managing AI prompts.
 You can execute tasks directly on the application by calling tools.
 Always use your tools to perform the actions requested by the user.
@@ -193,23 +249,30 @@ export async function runAgentCycle(
         }
       });
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${settings.apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents,
-            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            tools: [{ functionDeclarations: getGeminiTools() }],
-            generationConfig: { temperature: 0.1 }
-          })
-        }
-      );
+      const resolvedModel = resolveModelForProvider('gemini', settings.model);
+      const candidates = [resolvedModel, ...AI_MODEL_OPTIONS.gemini.filter(m => m !== resolvedModel)];
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gemini API Error: ${response.status} - ${errorText}`);
+      let response: Response | null = null;
+      let lastErrorText = '';
+
+      for (let index = 0; index < candidates.length; index += 1) {
+        const model = candidates[index];
+        response = await callGeminiModel(model, settings.apiKey, contents);
+
+        if (response.ok) {
+          break;
+        }
+
+        lastErrorText = await response.text();
+        if (!isRetryableGeminiError(response.status, lastErrorText) || index === candidates.length - 1) {
+          throw new Error(`Gemini API Error (${model}): ${response.status} - ${lastErrorText}`);
+        }
+
+        console.warn(`Gemini model ${model} failed, retrying with fallback model.`);
+      }
+
+      if (!response) {
+        throw new Error('Gemini API Error: No response received.');
       }
 
       const data = await response.json();
@@ -280,23 +343,43 @@ export async function runAgentCycle(
       // Insert system prompt at the top
       messages.unshift({ role: 'system', content: SYSTEM_PROMPT } as any);
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages,
-          tools: getOpenAITools(),
-          temperature: 0.1
-        })
-      });
+      const resolvedModel = resolveModelForProvider('openai', settings.model);
+      const candidates = [resolvedModel, ...AI_MODEL_OPTIONS.openai.filter(m => m !== resolvedModel)];
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenAI API Error: ${response.status} - ${errorText}`);
+      let response: Response | null = null;
+      let lastErrorText = '';
+
+      for (let index = 0; index < candidates.length; index += 1) {
+        const model = candidates[index];
+        response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${settings.apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            tools: getOpenAITools(),
+            temperature: 0.1
+          })
+        });
+
+        if (response.ok) {
+          break;
+        }
+
+        lastErrorText = await response.text();
+        const isRetryable = isOpenAiRetryableError(response.status, lastErrorText);
+        if (!isRetryable || index === candidates.length - 1) {
+          throw new Error(`OpenAI API Error (${model}): ${response.status} - ${lastErrorText}`);
+        }
+
+        console.warn(`OpenAI model ${model} failed, retrying with fallback model.`);
+      }
+
+      if (!response) {
+        throw new Error('OpenAI API Error: No response received.');
       }
 
       const data = await response.json();

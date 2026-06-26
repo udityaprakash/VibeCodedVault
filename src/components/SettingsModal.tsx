@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Palette, Moon, Sun, Tag, Cpu, Bot, Check, Trash2, Plus, Server, Eye, EyeOff, RefreshCw, Download } from 'lucide-react';
-import { PRESET_MODELS, getCustomModels, saveCustomModels, normalizeModelName, resolveExistingModelName } from '../utils/aiModels';
+import { PRESET_MODELS, getCustomModels, saveCustomModels, normalizeModelName, resolveExistingModelName, resolveModelForProvider } from '../utils/aiModels';
 import type { AIAgentSettings, UpdateInfo } from '../types';
 
 interface SettingsModalProps {
@@ -106,7 +106,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       provider: aiProvider,
       apiKey: aiApiKey.trim(),
       serverEnabled,
-      serverPort: Number(serverPort) || 3015
+      serverPort: Number(serverPort) || 3015,
+      model: resolveModelForProvider(aiProvider, aiSettings.model)
     });
     onClose();
   };

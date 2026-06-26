@@ -408,7 +408,8 @@ const DEFAULT_AI_SETTINGS: AIAgentSettings = {
   provider: 'gemini',
   apiKey: '',
   serverEnabled: false,
-  serverPort: 3015
+  serverPort: 3015,
+  model: 'gemini-2.5-flash-lite'
 };
 
 function App() {
@@ -1702,6 +1703,7 @@ function App() {
           onDeleteCategory={handleDeleteCategoryFromAI}
           onSetTheme={handleSetThemeFromAI}
           aiSettings={aiSettings}
+          onSaveAiSettings={handleSaveAiSettings}
           chatMessages={chatMessages}
           setChatMessages={setChatMessages}
         />
