@@ -331,6 +331,14 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     setPromptSwitches(prev => prev.map(s => s.id === id ? { ...s, value: newValue } : s));
   };
 
+  const handleUpdateSwitchHighlight = (id: string, highlightOnChecked: boolean) => {
+    setPromptSwitches(prev => prev.map(s => s.id === id ? { ...s, highlightOnChecked } : s));
+  };
+
+  const handleUpdateSwitchStrikethrough = (id: string, strikeThroughOnChecked: boolean) => {
+    setPromptSwitches(prev => prev.map(s => s.id === id ? { ...s, strikeThroughOnChecked } : s));
+  };
+
   const handleSave = () => {
     if (!title.trim() || !description.trim()) return;
 
@@ -659,27 +667,63 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                             )}
 
                             {sw.type === 'checkbox' && (
-                              <div>
-                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Default Checkbox Done State</label>
-                                <select
-                                  value={String(sw.value)}
-                                  onChange={e => handleUpdateSwitchValue(sw.id, e.target.value === 'true')}
-                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[11px] text-obsidian-300 font-semibold cursor-pointer"
-                                >
-                                  <option value="false">TODO (Unchecked)</option>
-                                  <option value="true">DONE (Checked)</option>
-                                </select>
+                              <div className="col-span-2 space-y-3">
+                                <div>
+                                  <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Default Checkbox Done State</label>
+                                  <select
+                                    value={String(sw.value)}
+                                    onChange={e => handleUpdateSwitchValue(sw.id, e.target.value === 'true')}
+                                    className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[11px] text-obsidian-300 font-semibold cursor-pointer"
+                                  >
+                                    <option value="false">TODO (Unchecked)</option>
+                                    <option value="true">DONE (Checked)</option>
+                                  </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 pt-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-obsidian-400 font-medium">Highlight when checked</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateSwitchHighlight(sw.id, sw.highlightOnChecked !== false ? false : true)}
+                                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                        sw.highlightOnChecked !== false ? 'bg-cyber-violet' : 'bg-obsidian-850'
+                                      }`}
+                                    >
+                                      <span
+                                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                          sw.highlightOnChecked !== false ? 'translate-x-4' : 'translate-x-0'
+                                        }`}
+                                      />
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-obsidian-400 font-medium">Strikethrough when checked</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateSwitchStrikethrough(sw.id, sw.strikeThroughOnChecked === true ? false : true)}
+                                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                        sw.strikeThroughOnChecked === true ? 'bg-cyber-violet' : 'bg-obsidian-850'
+                                      }`}
+                                    >
+                                      <span
+                                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                          sw.strikeThroughOnChecked === true ? 'translate-x-4' : 'translate-x-0'
+                                        }`}
+                                      />
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
                             )}
 
                             {sw.type === 'textarea' && (
-                              <div>
+                              <div className="col-span-2">
                                 <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Paragraph Content</label>
                                 <textarea
                                   value={sw.value}
                                   onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
-                                  rows={1}
-                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300 resize-none font-mono"
+                                  rows={7}
+                                  className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1.5 text-[11px] text-obsidian-300 resize-y font-mono leading-normal"
                                   placeholder="Default text field value"
                                 />
                               </div>

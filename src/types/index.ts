@@ -10,6 +10,8 @@ export interface RawSwitchData {
   type: string;
   label: string;
   value: any;
+  highlightOnChecked?: boolean;
+  strikeThroughOnChecked?: boolean;
 }
 
 export interface Prompt {

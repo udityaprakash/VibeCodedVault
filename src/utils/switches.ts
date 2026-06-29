@@ -39,16 +39,28 @@ export class StrikethroughSwitch extends PromptSwitch {
 
 // TODO: Implement checkbox switch subclass
 export class CheckboxSwitch extends PromptSwitch {
-  constructor(id: string, label = 'Task Status', value = false) {
+  public highlightOnChecked: boolean;
+  public strikeThroughOnChecked: boolean;
+
+  constructor(id: string, label = 'Task Status', value = false, highlightOnChecked = true, strikeThroughOnChecked = false) {
     super(id, 'checkbox', label, value);
+    this.highlightOnChecked = highlightOnChecked;
+    this.strikeThroughOnChecked = strikeThroughOnChecked;
   }
 
   clone(): CheckboxSwitch {
-    return new CheckboxSwitch(this.id, this.label, this.value);
+    return new CheckboxSwitch(this.id, this.label, this.value, this.highlightOnChecked, this.strikeThroughOnChecked);
   }
 
   toRaw(): RawSwitchData {
-    return { id: this.id, type: this.type, label: this.label, value: this.value };
+    return { 
+      id: this.id, 
+      type: this.type, 
+      label: this.label, 
+      value: this.value,
+      highlightOnChecked: this.highlightOnChecked,
+      strikeThroughOnChecked: this.strikeThroughOnChecked
+    };
   }
 
   validate(): boolean {
@@ -208,7 +220,13 @@ export class SwitchFactory {
       case 'strikethrough':
         return new StrikethroughSwitch(raw.id, raw.label, raw.value);
       case 'checkbox':
-        return new CheckboxSwitch(raw.id, raw.label, raw.value);
+        return new CheckboxSwitch(
+          raw.id,
+          raw.label,
+          raw.value,
+          raw.highlightOnChecked ?? true,
+          raw.strikeThroughOnChecked ?? false
+        );
       case 'textarea':
         return new TextAreaSwitch(raw.id, raw.label, raw.value);
       case 'copyable':
