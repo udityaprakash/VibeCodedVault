@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   LayoutGrid, Star, Pin, Plus, Trash2, 
   Download, Upload, ChevronLeft, ChevronRight,
-  Zap, Trash
+  Zap
 } from 'lucide-react';
 import type { Category } from '../types';
 import { CategoryIcon } from './CategoryIcon';
@@ -16,7 +16,6 @@ interface SidebarProps {
   onDeleteCategory: (id: string) => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
-  onOpenRecycleBin: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -27,8 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCategoryModal,
   onDeleteCategory,
   onExportBackup,
-  onImportBackup,
-  onOpenRecycleBin
+  onImportBackup
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -172,15 +170,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Backup & System Operations Footer */}
       <div className="p-4 border-t border-obsidian-850 space-y-1.5">
-        <button
-          onClick={onOpenRecycleBin}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 transition-all duration-150 cursor-pointer"
-          title="Open Recycle Bin"
-        >
-          <Trash size={14} className="text-cyber-rose" />
-          {!isCollapsed && <span>Recycle Bin</span>}
-        </button>
-
         <button
           onClick={onImportBackup}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-850 transition-all duration-150 cursor-pointer"

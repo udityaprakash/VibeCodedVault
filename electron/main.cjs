@@ -33,7 +33,10 @@ function cleanupOldInstallers() {
     const tempDir = os.tmpdir();
     const files = fs.readdirSync(tempDir);
     for (const file of files) {
-      if (file.startsWith('PromptVault-Setup-') && file.endsWith('.exe')) {
+      if (
+        (file.startsWith('PromptVault-Setup-') && file.endsWith('.exe')) ||
+        (file.startsWith('PromptVault-') && file.endsWith('.dmg'))
+      ) {
         try {
           fs.unlinkSync(path.join(tempDir, file));
         } catch (e) {
@@ -223,6 +226,17 @@ function findWindowsInstallerAsset(assets) {
   );
 }
 
+function findMacInstallerAsset(assets) {
+  if (!Array.isArray(assets)) {
+    return null;
+  }
+
+  return (
+    assets.find(asset => typeof asset?.name === 'string' && /\.dmg$/i.test(asset.name))
+    || null
+  );
+}
+
 function pickLatestRelease(releases) {
   if (!Array.isArray(releases)) {
     return null;
@@ -313,7 +327,9 @@ async function checkLatestRelease() {
       return null;
     }
 
-    const asset = findWindowsInstallerAsset(release.assets);
+    const asset = process.platform === 'darwin'
+      ? findMacInstallerAsset(release.assets)
+      : findWindowsInstallerAsset(release.assets);
 
     return {
       currentVersion,
@@ -421,6 +437,11 @@ function launchInstaller(installerPath) {
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
   const trySpawn = async () => {
+    if (process.platform === 'darwin') {
+      // For macOS, we don't spawn, we just open the DMG using shell.openPath
+      await shell.openPath(installerPath);
+      return true;
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const child = spawn(installerPath, [], {
@@ -789,7 +810,10 @@ ipcMain.handle('app-update-now', async () => {
       };
     }
 
-    const installerName = `PromptVault-Setup-${releaseInfo.latestVersion}-${Date.now()}.exe`;
+    const isMac = process.platform === 'darwin';
+    const installerName = isMac
+      ? `PromptVault-${releaseInfo.latestVersion}-${Date.now()}.dmg`
+      : `PromptVault-Setup-${releaseInfo.latestVersion}-${Date.now()}.exe`;
     const installerPath = path.join(os.tmpdir(), installerName);
     
     // Notify renderer that download is starting

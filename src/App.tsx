@@ -1466,7 +1466,6 @@ function App() {
           onDeleteCategory={handleDeleteCategory}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
-          onOpenRecycleBin={() => setRecycleBinOpen(true)}
         />
 
         {/* Main Dashboard Space */}
