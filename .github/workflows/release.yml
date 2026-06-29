@@ -26,14 +26,16 @@ jobs:
             const y = now.getUTCFullYear() - 2026;
             const mm = now.getUTCMonth() + 1;
             const dd = now.getUTCDate();
-            const hh = String(now.getUTCHours()).padStart(2,'0');
-            console.log(`${y}.${mm}.${dd}${hh}`);
+            const tt = String(now.getUTCHours()).padStart(2, '0');
+            console.log(\`\${y}.\${mm}.\${dd}\${tt}\`);
           ")
 
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Computed Version: $VERSION"
 
-  build:
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+  build-release:
     needs: create-version
 
     strategy:
@@ -60,16 +62,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Update package version
+      - name: Update package.json version
         run: npm version ${{ needs.create-version.outputs.version }} --no-git-tag-version
 
-      - name: Build Electron Application
+      - name: Verify package version
+        shell: bash
+        run: |
+          node -p "require('./package.json').version"
+
+      - name: Build Electron App
         run: npm run electron:build -- --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Useful for debugging CI failures
       - name: List release files (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -81,61 +87,37 @@ jobs:
         run: |
           ls -R release
 
-      # Upload Windows artifacts
-      - name: Upload Windows artifacts
+      ####################################################################
+      # Windows Release
+      ####################################################################
+      - name: Create / Update GitHub Release (Windows)
         if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-release
-          path: |
-            release/*.exe
-            release/*.blockmap
-            release/latest.yml
-          if-no-files-found: error
-
-      # Upload macOS artifacts
-      - name: Upload macOS artifacts
-        if: matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-release
-          path: |
-            release/*.dmg
-            release/latest-mac.yml
-          if-no-files-found: error
-
-  release:
-    needs:
-      - create-version
-      - build
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-release
-          path: artifacts/windows
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: mac-release
-          path: artifacts/mac
-
-      - name: Display downloaded artifacts
-        run: |
-          find artifacts -type f
-
-      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.create-version.outputs.tag }}
-          name: ${{ needs.create-version.outputs.tag }}
+          name: ${{ needs.create-version.outputs.version }}
           fail_on_unmatched_files: true
+          append_body: true
           files: |
-            artifacts/windows/*
-            artifacts/mac/*
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      ####################################################################
+      # macOS Release
+      ####################################################################
+      - name: Upload macOS Assets
+        if: matrix.os == 'macos-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-version.outputs.tag }}
+          name: ${{ needs.create-version.outputs.version }}
+          fail_on_unmatched_files: true
+          append_body: true
+          files: |
+            release/*.dmg
+            release/latest-mac.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
