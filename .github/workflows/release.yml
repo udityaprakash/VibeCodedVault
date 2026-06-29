@@ -1,0 +1,87 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  create-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      tag: ${{ steps.compute.outputs.tag }}
+    steps:
+      - name: Compute custom version
+        id: compute
+        run: |
+          VERSION=$(node -e "
+            const now = new Date();
+            const y = now.getUTCFullYear() - 2026;
+            const mm = now.getUTCMonth() + 1;
+            const dd = now.getUTCDate();
+            const tt = String(now.getUTCHours()).padStart(2, '0');
+            console.log(\`\${y}.\${mm}.\${dd}\${tt}\`);
+          ")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+  build-release:
+    needs: create-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Update package.json version (no commit)
+        run: npm version ${{ needs.create-version.outputs.version }} --no-git-tag-version
+
+      - name: Build Electron App
+        run: npm run electron:build -- --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.create-version.outputs.tag }}
+          name: ${{ needs.create-version.outputs.tag }}
+          fail_on_unmatched_files: true
+          files: |
+            release/*.exe
+            release/*.blockmap
+
+      - name: Create GitHub Release (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.create-version.outputs.tag }}
+          name: ${{ needs.create-version.outputs.tag }}
+          fail_on_unmatched_files: true
+          files: |
+            release/*.dmg
+            release/*.zip

@@ -71,6 +71,14 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     setSwitches(prev => prev.map(s => s.id === id ? { ...s, value: newValue } : s));
   };
 
+  const handleUpdateSwitchHighlight = (id: string, highlightOnChecked: boolean) => {
+    setSwitches(prev => prev.map(s => s.id === id ? { ...s, highlightOnChecked } : s));
+  };
+
+  const handleUpdateSwitchStrikethrough = (id: string, strikeThroughOnChecked: boolean) => {
+    setSwitches(prev => prev.map(s => s.id === id ? { ...s, strikeThroughOnChecked } : s));
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim().slice(0, 30);
@@ -288,27 +296,63 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                         )}
 
                         {sw.type === 'checkbox' && (
-                          <div>
-                            <label className="text-[8px] uppercase tracking-wider text-obsidian-500 block mb-0.5">Default Checked State</label>
-                            <select
-                              value={String(sw.value)}
-                              onChange={e => handleUpdateSwitchValue(sw.id, e.target.value === 'true')}
-                              className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[10px] text-obsidian-300 cursor-pointer font-semibold"
-                            >
-                              <option value="false">Unchecked (Default)</option>
-                              <option value="true">Checked (Done)</option>
-                            </select>
+                          <div className="col-span-2 space-y-2 mt-1">
+                            <div>
+                              <label className="text-[8px] uppercase tracking-wider text-obsidian-500 block mb-0.5">Default Checked State</label>
+                              <select
+                                value={String(sw.value)}
+                                onChange={e => handleUpdateSwitchValue(sw.id, e.target.value === 'true')}
+                                className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[10px] text-obsidian-300 cursor-pointer font-semibold"
+                              >
+                                <option value="false">Unchecked (Default)</option>
+                                <option value="true">Checked (Done)</option>
+                              </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 pt-0.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] text-obsidian-400 font-medium">Highlight checked</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateSwitchHighlight(sw.id, sw.highlightOnChecked !== false ? false : true)}
+                                  className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                    sw.highlightOnChecked !== false ? 'bg-cyber-violet' : 'bg-obsidian-850'
+                                  }`}
+                                >
+                                  <span
+                                    className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                      sw.highlightOnChecked !== false ? 'translate-x-3' : 'translate-x-0'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] text-obsidian-400 font-medium">Strikethrough checked</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateSwitchStrikethrough(sw.id, sw.strikeThroughOnChecked === true ? false : true)}
+                                  className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                    sw.strikeThroughOnChecked === true ? 'bg-cyber-violet' : 'bg-obsidian-850'
+                                  }`}
+                                >
+                                  <span
+                                    className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                      sw.strikeThroughOnChecked === true ? 'translate-x-3' : 'translate-x-0'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
 
                         {sw.type === 'textarea' && (
-                          <div>
+                          <div className="col-span-2 mt-1">
                             <label className="text-[8px] uppercase tracking-wider text-obsidian-500 block mb-0.5">Default Text Content</label>
-                            <input
-                              type="text"
+                            <textarea
                               value={sw.value}
                               onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
-                              className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[10px] text-obsidian-300"
+                              rows={7}
+                              className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[10px] text-obsidian-300 resize-y font-mono leading-normal"
                               placeholder="Default value placeholder"
                             />
                           </div>

@@ -208,28 +208,49 @@ export const PromptGrid: React.FC<PromptGridProps> = ({
             <div className="space-y-3 my-2 z-10 titlebar-nodrag">
               
               {/* Checkbox Done Toggle switches */}
-              {checkboxSwitches.map((sw) => (
-                <div 
-                  key={sw.id}
-                  className="flex items-center gap-2 text-xs text-obsidian-300"
-                  onClick={e => e.stopPropagation()}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateSwitchValue(prompt, sw, !sw.value)}
-                    className="text-cyber-violet hover:opacity-80 transition-opacity cursor-pointer"
+              {checkboxSwitches.map((sw) => {
+                const isChecked = sw.value === true;
+                const strikeThrough = sw.strikeThroughOnChecked === true && isChecked;
+                
+                // Determine if this item should be highlighted
+                const shouldHighlight = sw.highlightOnChecked !== false
+                  ? isChecked
+                  : !isChecked;
+                  
+                const highlightColorClass = sw.highlightOnChecked !== false
+                  ? 'text-cyber-cyan drop-shadow-[0_0_4px_rgba(6,182,212,0.35)]'
+                  : 'text-cyber-violet drop-shadow-[0_0_4px_rgba(139,92,246,0.35)]';
+
+                const labelClass = [
+                  strikeThrough ? 'line-through' : '',
+                  shouldHighlight
+                    ? `font-semibold ${highlightColorClass}`
+                    : 'text-obsidian-400 opacity-60'
+                ].filter(Boolean).join(' ');
+
+                return (
+                  <div 
+                    key={sw.id}
+                    className="flex items-center gap-2 text-xs"
+                    onClick={e => e.stopPropagation()}
                   >
-                    {sw.value ? (
-                      <CheckSquare size={14} className="text-cyber-cyan" />
-                    ) : (
-                      <Square size={14} className="text-obsidian-600" />
-                    )}
-                  </button>
-                  <span className={sw.value ? 'line-through opacity-60' : ''}>
-                    {sw.label || 'Task Done'}
-                  </span>
-                </div>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateSwitchValue(prompt, sw, !sw.value)}
+                      className="text-cyber-violet hover:opacity-80 transition-opacity cursor-pointer animate-in zoom-in duration-100"
+                    >
+                      {isChecked ? (
+                        <CheckSquare size={14} className="text-cyber-cyan" />
+                      ) : (
+                        <Square size={14} className="text-obsidian-600" />
+                      )}
+                    </button>
+                    <span className={labelClass}>
+                      {sw.label || 'Task Done'}
+                    </span>
+                  </div>
+                );
+              })}
 
               {/* Hoverable External Links */}
               {linkSwitches.length > 0 && (
