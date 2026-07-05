@@ -737,93 +737,12 @@ function App() {
     }
   };
 
-  // Interval timer for scheduled tasks check (Reminders and Deletes)
-  useEffect(() => {
-    if (prompts.length > 0) {
-      const timer = setInterval(() => {
-        void scanSchedules(prompts);
-      }, 10000);
-      return () => clearInterval(timer);
-    }
-  }, [prompts]);
-
   // Request notifications permissions on load
   useEffect(() => {
     if (window.Notification && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
       void Notification.requestPermission();
     }
   }, []);
-
-  const scanSchedules = async (currentPrompts: Prompt[]) => {
-    const now = Date.now();
-    
-    // We must run sequentially to avoid concurrent filesystem writes in main.cjs
-    for (const prompt of currentPrompts) {
-      // 1. Check Scheduled Deletes
-      const deleteTime = prompt.switches?.find(s => s.type === 'delete')?.value;
-      if (deleteTime) {
-        const deleteTimeMs = new Date(deleteTime).getTime();
-        if (!isNaN(deleteTimeMs) && deleteTimeMs <= now) {
-          console.log(`Auto-deleting prompt: ${prompt.title} (due ${deleteTime})`);
-          if (window.api && window.api.deletePrompt) {
-            const data = await window.api.deletePrompt(prompt.id);
-            setPrompts(data.prompts || []);
-            setCategories(data.categories || []);
-            setDeletedPrompts(data.deletedPrompts || []);
-            triggerNotification(`Prompt "${prompt.title}" automatically moved to Recycle Bin.`, 'info');
-            // Refresh prompts list for next iterations
-            currentPrompts = data.prompts || [];
-            continue; // prompt deleted, skip reminder check
-          }
-        }
-      }
-
-      // 2. Check Reminders
-      const reminderSw = prompt.switches?.find(s => s.type === 'reminder');
-      if (reminderSw && reminderSw.value && reminderSw.value.dateTime) {
-        const reminderTime = new Date(reminderSw.value.dateTime).getTime();
-        if (!isNaN(reminderTime) && reminderTime <= now && !reminderSw.value.notified) {
-          console.log(`Triggering reminder for prompt: ${prompt.title} (due ${reminderSw.value.dateTime})`);
-          
-          // Trigger native OS notification
-          if (window.Notification) {
-            if (Notification.permission === 'granted') {
-              new Notification(`Prompt Vault: ${prompt.title}`, {
-                body: reminderSw.value.description || 'Scheduled reminder is active.'
-              });
-            } else if (Notification.permission !== 'denied') {
-              Notification.requestPermission().then(permission => {
-                if (permission === 'granted') {
-                  new Notification(`Prompt Vault: ${prompt.title}`, {
-                    body: reminderSw.value.description || 'Scheduled reminder is active.'
-                  });
-                }
-              });
-            }
-          }
-
-          // Update notified flag
-          const updatedSwitches = (prompt.switches || []).map(sw => 
-            sw.type === 'reminder' ? { ...sw, value: { ...sw.value, notified: true } } : sw
-          );
-          
-          const updatedPrompt = {
-            ...prompt,
-            switches: updatedSwitches
-          };
-
-          if (window.api && window.api.savePrompt) {
-            const data = await window.api.savePrompt(updatedPrompt);
-            setPrompts(data.prompts || []);
-            setCategories(data.categories || []);
-            setDeletedPrompts(data.deletedPrompts || []);
-            // Refresh prompts list for next iterations
-            currentPrompts = data.prompts || [];
-          }
-        }
-      }
-    }
-  };
 
   const showConfirm = async (message: string, detail?: string): Promise<boolean> => {
     if (window.api && window.api.confirm) {
@@ -907,9 +826,6 @@ function App() {
         setPrompts(data.prompts || []);
         setCategories(data.categories || []);
         setDeletedPrompts(data.deletedPrompts || []);
-        
-        // Trigger Option A catch-up check on startup
-        void scanSchedules(data.prompts || []);
       } else {
         // Fallback for browser previews
         console.warn('Electron window.api not detected, seeding mock browser memory.');

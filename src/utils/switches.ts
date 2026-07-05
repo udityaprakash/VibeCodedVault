@@ -213,6 +213,25 @@ export class NoteSwitch extends PromptSwitch {
   }
 }
 
+// TODO: Implement increment counter switch subclass
+export class CounterSwitch extends PromptSwitch {
+  constructor(id: string, label = 'Counter', value = 0) {
+    super(id, 'counter', label, value);
+  }
+
+  clone(): CounterSwitch {
+    return new CounterSwitch(this.id, this.label, this.value);
+  }
+
+  toRaw(): RawSwitchData {
+    return { id: this.id, type: this.type, label: this.label, value: this.value };
+  }
+
+  validate(): boolean {
+    return typeof this.value === 'number';
+  }
+}
+
 // TODO: Implement SwitchFactory for instantiation and defaults
 export class SwitchFactory {
   static create(raw: RawSwitchData): PromptSwitch {
@@ -241,6 +260,8 @@ export class SwitchFactory {
         return new ScheduledDeleteSwitch(raw.id, raw.label, raw.value);
       case 'note':
         return new NoteSwitch(raw.id, raw.label, raw.value);
+      case 'counter':
+        return new CounterSwitch(raw.id, raw.label, raw.value);
       default:
         throw new Error(`Unknown switch type: ${raw.type}`);
     }
@@ -267,6 +288,8 @@ export class SwitchFactory {
         return new ScheduledDeleteSwitch(id, 'Self-Destruct Date', '');
       case 'note':
         return new NoteSwitch(id, 'Calendar Note Override', '');
+      case 'counter':
+        return new CounterSwitch(id, 'Counter', 0);
       default:
         throw new Error(`Unknown switch type: ${type}`);
     }

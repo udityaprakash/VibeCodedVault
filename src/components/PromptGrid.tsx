@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Pin, Star, Copy, Check, Flame, Layers, 
-  ExternalLink, CheckSquare, Square, Link2
+  ExternalLink, CheckSquare, Square, Link2, Plus, Minus
 } from 'lucide-react';
 import type { Prompt, Category, RawSwitchData } from '../types';
 
@@ -111,6 +111,7 @@ export const PromptGrid: React.FC<PromptGridProps> = ({
         const checkboxSwitches = activeSwitches.filter(s => s.type === 'checkbox');
         const copyableSw = activeSwitches.find(s => s.type === 'copyable');
         const linkSwitches = activeSwitches.filter(s => s.type === 'link');
+        const counterSwitches = activeSwitches.filter(s => s.type === 'counter');
 
         // Apply title strikethrough style
         const isStrikethrough = strikethroughSw?.value === true;
@@ -208,54 +209,104 @@ export const PromptGrid: React.FC<PromptGridProps> = ({
             <div className="space-y-3 my-2 z-10 titlebar-nodrag">
               
               {/* Checkbox Done Toggle switches */}
-              {checkboxSwitches.map((sw) => {
-                const isChecked = sw.value === true;
-                const strikeThrough = sw.strikeThroughOnChecked === true && isChecked;
-                
-                // Determine if this item should be highlighted
-                const shouldHighlight = sw.highlightOnChecked !== false
-                  ? isChecked
-                  : !isChecked;
+              {checkboxSwitches.length > 3 ? (
+                <div 
+                  className="flex items-center gap-3 overflow-x-auto no-scrollbar flex-nowrap py-1"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {checkboxSwitches.map((sw) => {
+                    const isChecked = sw.value === true;
+                    const strikeThrough = sw.strikeThroughOnChecked === true && isChecked;
+                    
+                    // Determine if this item should be highlighted
+                    const shouldHighlight = sw.highlightOnChecked !== false
+                      ? isChecked
+                      : !isChecked;
+                      
+                    const highlightColorClass = sw.highlightOnChecked !== false
+                      ? 'text-cyber-cyan drop-shadow-[0_0_4px_rgba(6,182,212,0.35)]'
+                      : 'text-cyber-violet drop-shadow-[0_0_4px_rgba(139,92,246,0.35)]';
+
+                    const labelClass = [
+                      strikeThrough ? 'line-through' : '',
+                      shouldHighlight
+                        ? `font-semibold ${highlightColorClass}`
+                        : 'text-obsidian-400 opacity-60'
+                    ].filter(Boolean).join(' ');
+
+                    return (
+                      <div 
+                        key={sw.id}
+                        className="flex items-center gap-2 text-xs shrink-0"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSwitchValue(prompt, sw, !sw.value)}
+                          className="text-cyber-violet hover:opacity-80 transition-opacity cursor-pointer animate-in zoom-in duration-100"
+                        >
+                          {isChecked ? (
+                            <CheckSquare size={14} className="text-cyber-cyan" />
+                          ) : (
+                            <Square size={14} className="text-obsidian-600" />
+                          )}
+                        </button>
+                        <span className={labelClass}>
+                          {sw.label || 'Task Done'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                checkboxSwitches.map((sw) => {
+                  const isChecked = sw.value === true;
+                  const strikeThrough = sw.strikeThroughOnChecked === true && isChecked;
                   
-                const highlightColorClass = sw.highlightOnChecked !== false
-                  ? 'text-cyber-cyan drop-shadow-[0_0_4px_rgba(6,182,212,0.35)]'
-                  : 'text-cyber-violet drop-shadow-[0_0_4px_rgba(139,92,246,0.35)]';
+                  // Determine if this item should be highlighted
+                  const shouldHighlight = sw.highlightOnChecked !== false
+                    ? isChecked
+                    : !isChecked;
+                    
+                  const highlightColorClass = sw.highlightOnChecked !== false
+                    ? 'text-cyber-cyan drop-shadow-[0_0_4px_rgba(6,182,212,0.35)]'
+                    : 'text-cyber-violet drop-shadow-[0_0_4px_rgba(139,92,246,0.35)]';
 
-                const labelClass = [
-                  strikeThrough ? 'line-through' : '',
-                  shouldHighlight
-                    ? `font-semibold ${highlightColorClass}`
-                    : 'text-obsidian-400 opacity-60'
-                ].filter(Boolean).join(' ');
+                  const labelClass = [
+                    strikeThrough ? 'line-through' : '',
+                    shouldHighlight
+                      ? `font-semibold ${highlightColorClass}`
+                      : 'text-obsidian-400 opacity-60'
+                  ].filter(Boolean).join(' ');
 
-                return (
-                  <div 
-                    key={sw.id}
-                    className="flex items-center gap-2 text-xs"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateSwitchValue(prompt, sw, !sw.value)}
-                      className="text-cyber-violet hover:opacity-80 transition-opacity cursor-pointer animate-in zoom-in duration-100"
+                  return (
+                    <div 
+                      key={sw.id}
+                      className="flex items-center gap-2 text-xs"
+                      onClick={e => e.stopPropagation()}
                     >
-                      {isChecked ? (
-                        <CheckSquare size={14} className="text-cyber-cyan" />
-                      ) : (
-                        <Square size={14} className="text-obsidian-600" />
-                      )}
-                    </button>
-                    <span className={labelClass}>
-                      {sw.label || 'Task Done'}
-                    </span>
-                  </div>
-                );
-              })}
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateSwitchValue(prompt, sw, !sw.value)}
+                        className="text-cyber-violet hover:opacity-80 transition-opacity cursor-pointer animate-in zoom-in duration-100"
+                      >
+                        {isChecked ? (
+                          <CheckSquare size={14} className="text-cyber-cyan" />
+                        ) : (
+                          <Square size={14} className="text-obsidian-600" />
+                        )}
+                      </button>
+                      <span className={labelClass}>
+                        {sw.label || 'Task Done'}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
 
               {/* Hoverable External Links */}
               {linkSwitches.length > 0 && (
                 <div 
-                  className="flex items-center gap-2 flex-wrap"
+                  className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-nowrap py-1"
                   onClick={e => e.stopPropagation()}
                 >
                   {linkSwitches.map((sw) => (
@@ -264,13 +315,51 @@ export const PromptGrid: React.FC<PromptGridProps> = ({
                       href={sw.value || '#'}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="group/link inline-flex items-center gap-1 bg-cyber-cyan/15 border border-cyber-cyan/20 text-cyber-cyan text-[10px] px-2 py-0.5 rounded-full hover:bg-cyber-cyan/25 transition-all"
+                      className="group/link inline-flex items-center gap-1 bg-cyber-cyan/15 border border-cyber-cyan/20 text-cyber-cyan text-[10px] px-2 py-0.5 rounded-full hover:bg-cyber-cyan/25 transition-all shrink-0"
                       title={sw.label || 'Open Link'}
                     >
                       <Link2 size={10} />
                       <span className="max-w-[80px] truncate">{sw.label || 'Link'}</span>
                       <ExternalLink size={8} className="opacity-0 group-hover/link:opacity-100 transition-opacity" />
                     </a>
+                  ))}
+                </div>
+              )}
+
+              {/* Counter Switches */}
+              {counterSwitches.length > 0 && (
+                <div 
+                  className="flex flex-col gap-1.5"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {counterSwitches.map((sw) => (
+                    <div
+                      key={sw.id}
+                      className="flex items-center justify-between text-xs bg-obsidian-850/45 border border-obsidian-800/60 rounded px-2.5 py-1"
+                    >
+                      <span className="text-obsidian-400 font-medium truncate max-w-[120px]">{sw.label || 'Counter'}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSwitchValue(prompt, sw, (parseInt(sw.value) || 0) - 1)}
+                          className="text-cyber-violet hover:text-cyber-cyan bg-obsidian-800 hover:bg-obsidian-750 border border-obsidian-700 hover:border-cyber-cyan/50 h-5 w-5 rounded flex items-center justify-center transition-all cursor-pointer"
+                          aria-label="Decrement"
+                        >
+                          <Minus size={10} />
+                        </button>
+                        <span className="font-semibold min-w-[24px] text-center text-obsidian-200">
+                          {sw.value ?? 0}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSwitchValue(prompt, sw, (parseInt(sw.value) || 0) + 1)}
+                          className="text-cyber-violet hover:text-cyber-cyan bg-obsidian-800 hover:bg-obsidian-750 border border-obsidian-700 hover:border-cyber-cyan/50 h-5 w-5 rounded flex items-center justify-center transition-all cursor-pointer"
+                          aria-label="Increment"
+                        >
+                          <Plus size={10} />
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

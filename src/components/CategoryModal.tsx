@@ -26,7 +26,8 @@ const SWITCH_OPTIONS = [
   { type: 'color', name: 'Custom Tile Color', desc: 'Applies transparency color layer to prompt cards', icon: Palette },
   { type: 'reminder', name: 'Scheduled Reminder', desc: 'Sets custom time reminders with system notifications', icon: Clock },
   { type: 'delete', name: 'Scheduled Auto Delete', desc: 'Automatically schedules removal of tiles to recycle bin', icon: AlertTriangle },
-  { type: 'note', name: 'Calendar Note', desc: 'Overrides default title shown in the calendar view', icon: Calendar }
+  { type: 'note', name: 'Calendar Note', desc: 'Overrides default title shown in the calendar view', icon: Calendar },
+  { type: 'counter', name: 'Increment Counter', desc: 'Adds increment/decrement counters to prompt tile', icon: Plus }
 ];
 
 export const CategoryModal: React.FC<CategoryModalProps> = ({
@@ -46,9 +47,11 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
   // TODO: Implement handleAddSwitch to append preset switch
   const handleAddSwitch = (type: string) => {
     const existingCount = switches.filter(s => s.type === type).length;
-    const isLimitReached = (type === 'textarea' || type === 'checkbox' || type === 'link')
+    const isLimitReached = (type === 'textarea')
       ? existingCount >= 3
-      : existingCount >= 1;
+      : (type === 'checkbox' || type === 'link' || type === 'counter')
+        ? false
+        : existingCount >= 1;
     if (isLimitReached) return;
     
     const newSwitchObj = SwitchFactory.createDefault(type);
@@ -198,9 +201,11 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                     <div className="text-[9px] uppercase tracking-wider text-obsidian-500 px-2 py-1">Available Switches</div>
                     {SWITCH_OPTIONS.map(opt => {
                       const existingCount = switches.filter(s => s.type === opt.type).length;
-                      const isLimitReached = (opt.type === 'textarea' || opt.type === 'checkbox' || opt.type === 'link')
+                      const isLimitReached = (opt.type === 'textarea')
                         ? existingCount >= 3
-                        : existingCount >= 1;
+                        : (opt.type === 'checkbox' || opt.type === 'link' || opt.type === 'counter')
+                          ? false
+                          : existingCount >= 1;
                       const IconComp = opt.icon;
                       return (
                         <button
@@ -384,7 +389,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                           </div>
                         )}
 
-                        {sw.type === 'note' && (
+                         {sw.type === 'note' && (
                           <div>
                             <label className="text-[8px] uppercase tracking-wider text-obsidian-500 block mb-0.5">Default Note Content</label>
                             <input
@@ -393,6 +398,19 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                               onChange={e => handleUpdateSwitchValue(sw.id, e.target.value)}
                               className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[10px] text-obsidian-300"
                               placeholder="Note shown on calendar"
+                            />
+                          </div>
+                        )}
+
+                        {sw.type === 'counter' && (
+                          <div>
+                            <label className="text-[8px] uppercase tracking-wider text-obsidian-500 block mb-0.5">Default Counter Value</label>
+                            <input
+                              type="number"
+                              value={sw.value}
+                              onChange={e => handleUpdateSwitchValue(sw.id, parseInt(e.target.value) || 0)}
+                              className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2 py-1 text-[10px] text-obsidian-300"
+                              placeholder="0"
                             />
                           </div>
                         )}

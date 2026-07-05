@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, Notification, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -27,6 +27,8 @@ const isDev = !app.isPackaged;
 let mainWindow;
 let updateCheckInFlight = null;
 let downloadedInstallerPath = null;
+let tray = null;
+let isQuitting = false;
 
 function cleanupOldInstallers() {
   try {
@@ -507,9 +509,146 @@ function createWindow() {
     mainWindow.show();
   });
 
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      return false;
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Open external links in default system browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http:') || url.startsWith('https:')) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith('http:') || url.startsWith('https:')) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+}
+
+function createTray() {
+  if (tray) return;
+  const iconBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVQ4T2NkoBAwUqifAWowf//fGEZGwlhExAjmYUA/A8b/DIwMhOFrICIEqGdgYGBgYGQoADL6Cgtu86D+gNQLwuwC1GgGBgZ+DA2P0NVAwUAM8GBo+P+fAczfD1SArwH9DP8ZGBkIuxGkBmxkQO+tIIwTMBa6BvxYGP7/Z2AkDAaLwzR0A0bQDRg2j2A1cIAPQyP6u3gBAMZqQfLszT7eAAAAAElFTkSuQmCC';
+  const trayIcon = nativeImage.createFromDataURL(iconBase64);
+  
+  tray = new Tray(trayIcon);
+  const contextMenu = Menu.buildFromTemplate([
+    { 
+      label: 'Open PromptVault', 
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      } 
+    },
+    { type: 'separator' },
+    { 
+      label: 'Exit', 
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      } 
+    }
+  ]);
+  
+  tray.setToolTip('PromptVault Studio');
+  tray.setContextMenu(contextMenu);
+  
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+function scanSchedules() {
+  try {
+    const db = readDatabase();
+    const now = Date.now();
+    let dbChanged = false;
+    
+    if (!db || !db.prompts) return;
+
+    for (let i = 0; i < db.prompts.length; i++) {
+      const prompt = db.prompts[i];
+      
+      // 1. Check Scheduled Deletes
+      const deleteSw = prompt.switches?.find(s => s.type === 'delete');
+      if (deleteSw && deleteSw.value) {
+        const deleteTimeMs = new Date(deleteSw.value).getTime();
+        if (!isNaN(deleteTimeMs) && deleteTimeMs <= now) {
+          // Move to trash
+          db.prompts.splice(i, 1);
+          i--; // Adjust index since we removed an item
+          if (!db.deletedPrompts) {
+            db.deletedPrompts = [];
+          }
+          db.deletedPrompts = db.deletedPrompts.filter(p => p.id !== prompt.id);
+          db.deletedPrompts.push({
+            ...prompt,
+            deletedAt: now
+          });
+          dbChanged = true;
+          
+          // Show notification
+          if (Notification.isSupported()) {
+            new Notification({
+              title: 'Prompt Auto-Deleted',
+              body: `Prompt "${prompt.title}" has been moved to the Recycle Bin.`,
+            }).show();
+          }
+          continue;
+        }
+      }
+
+      // 2. Check Reminders
+      const reminderSw = prompt.switches?.find(s => s.type === 'reminder');
+      if (reminderSw && reminderSw.value && reminderSw.value.dateTime) {
+        const reminderTime = new Date(reminderSw.value.dateTime).getTime();
+        if (!isNaN(reminderTime) && reminderTime <= now && !reminderSw.value.notified) {
+          // Trigger native notification
+          if (Notification.isSupported()) {
+            new Notification({
+              title: `Prompt Reminder: ${prompt.title}`,
+              body: reminderSw.value.description || 'Scheduled reminder is active.'
+            }).show();
+          }
+          
+          // Update notified flag
+          reminderSw.value.notified = true;
+          dbChanged = true;
+        }
+      }
+    }
+
+    if (dbChanged) {
+      writeDatabase(db);
+      // Send update event to renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('db-updated');
+      }
+    }
+  } catch (e) {
+    console.error('Error scanning background schedules:', e);
+  }
+}
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.promptvault.app');
 }
 
 // Ensure database exists
@@ -517,6 +656,9 @@ app.whenReady().then(() => {
   cleanupOldInstallers();
   initDatabase();
   createWindow();
+  createTray();
+
+  setInterval(scanSchedules, 10000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -524,7 +666,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // Stay in tray, do not quit
 });
 
 // ==========================================
