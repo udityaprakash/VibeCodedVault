@@ -1,11 +1,20 @@
 import { type FC, useEffect } from 'react';
 import { Check, Layers, Palette, X } from 'lucide-react';
+import { CategoryIcon } from './CategoryIcon';
 
-type BackupOption = 'prompts' | 'theme';
+export type BackupOption = 'prompts' | 'theme';
 
-interface BackupSelection {
+export interface BackupSelection {
   prompts: boolean;
   theme: boolean;
+}
+
+export interface CategorySelectionItem {
+  id: string;
+  name: string;
+  color?: string;
+  icon?: string;
+  count: number;
 }
 
 interface BackupDialogProps {
@@ -17,6 +26,10 @@ interface BackupDialogProps {
   onClose: () => void;
   onConfirm: () => void;
   confirmDisabled?: boolean;
+  categoriesToSelect?: CategorySelectionItem[];
+  selectedCategoryIds?: string[];
+  onToggleCategory?: (id: string) => void;
+  onSelectAllCategories?: (selectAll: boolean) => void;
 }
 
 const rows: Array<{
@@ -48,6 +61,10 @@ export const BackupDialog: FC<BackupDialogProps> = ({
   onClose,
   onConfirm,
   confirmDisabled = false,
+  categoriesToSelect = [],
+  selectedCategoryIds = [],
+  onToggleCategory,
+  onSelectAllCategories,
 }) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -127,31 +144,95 @@ export const BackupDialog: FC<BackupDialogProps> = ({
             return (
               <div
                 key={row.key}
-                className="flex items-center justify-between gap-4 rounded-xl border border-obsidian-850 bg-obsidian-900/60 px-4 py-3"
+                className="rounded-xl border border-obsidian-850 bg-obsidian-900/60 p-3.5 transition-all"
               >
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="mt-0.5 rounded-lg border border-obsidian-800 bg-obsidian-950 p-2 text-cyber-violet">
-                    <Icon size={14} />
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="mt-0.5 rounded-lg border border-obsidian-800 bg-obsidian-950 p-2 text-cyber-violet shrink-0">
+                      <Icon size={14} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-obsidian-100">{row.label}</div>
+                      <div className="text-xs leading-relaxed text-obsidian-400">{row.description}</div>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-obsidian-100">{row.label}</div>
-                    <div className="text-xs leading-relaxed text-obsidian-400">{row.description}</div>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onToggle(row.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors shrink-0 ${
+                      isSelected
+                        ? 'border-cyber-violet/40 bg-cyber-violet/15 text-cyber-violet'
+                        : 'border-obsidian-800 bg-obsidian-950 text-obsidian-500'
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    <Check size={11} className={isSelected ? 'opacity-100' : 'opacity-0'} />
+                    {isSelected ? 'On' : 'Off'}
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => onToggle(row.key)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                    isSelected
-                      ? 'border-cyber-violet/40 bg-cyber-violet/15 text-cyber-violet'
-                      : 'border-obsidian-800 bg-obsidian-950 text-obsidian-500'
-                  }`}
-                  aria-pressed={isSelected}
-                >
-                  <Check size={11} className={isSelected ? 'opacity-100' : 'opacity-0'} />
-                  {isSelected ? 'On' : 'Off'}
-                </button>
+                {/* Sub-section for category selection */}
+                {row.key === 'prompts' && isSelected && categoriesToSelect && categoriesToSelect.length > 0 && (
+                  <div className="mt-3.5 border-t border-obsidian-800 pt-3 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] uppercase tracking-wider text-obsidian-400 font-bold">Categories to {mode === 'export' ? 'export' : 'import'}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allSelected = categoriesToSelect.every(c => selectedCategoryIds.includes(c.id));
+                          onSelectAllCategories?.(!allSelected);
+                        }}
+                        className="text-[10px] text-cyber-cyan hover:underline uppercase tracking-wider font-bold transition-all cursor-pointer"
+                      >
+                        {categoriesToSelect.every(c => selectedCategoryIds.includes(c.id)) ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1">
+                      {categoriesToSelect.map(cat => {
+                        const isCatSelected = selectedCategoryIds.includes(cat.id);
+                        return (
+                          <label
+                            key={cat.id}
+                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                              isCatSelected
+                                ? 'bg-obsidian-950 border-cyber-violet/30 text-obsidian-100 shadow-[0_0_8px_rgba(139,92,246,0.05)]'
+                                : 'bg-obsidian-950/40 border-obsidian-850/60 text-obsidian-400 hover:border-obsidian-800 hover:text-obsidian-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isCatSelected}
+                              onChange={() => onToggleCategory?.(cat.id)}
+                              className="sr-only"
+                            />
+                            {/* Checkbox representation */}
+                            <div className={`w-3.5 h-3.5 rounded flex items-center justify-center border transition-all ${
+                              isCatSelected
+                                ? 'bg-cyber-violet border-cyber-violet text-white shadow-[0_0_6px_rgba(139,92,246,0.3)]'
+                                : 'border-obsidian-750 bg-obsidian-900'
+                            }`}>
+                              {isCatSelected && <Check size={10} strokeWidth={3} />}
+                            </div>
+
+                            {/* Category dot/icon */}
+                            {cat.id !== 'uncategorized' && cat.icon ? (
+                              <CategoryIcon name={cat.icon} size={11} color={cat.color} />
+                            ) : (
+                              <div className="w-1.5 h-1.5 rounded-full bg-obsidian-500 mx-0.5" />
+                            )}
+
+                            <span className="truncate flex-1 font-medium leading-none">{cat.name}</span>
+                            <span className="text-[9px] font-mono text-obsidian-400 bg-obsidian-900/80 px-1 py-0.5 rounded border border-obsidian-850/80">
+                              {cat.count}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

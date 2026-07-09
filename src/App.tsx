@@ -4,7 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { PromptGrid } from './components/PromptGrid';
 import { PromptEditor } from './components/PromptEditor';
 import { CommandPalette } from './components/CommandPalette';
-import { BackupDialog } from './components/BackupDialog';
+import { BackupDialog, type CategorySelectionItem } from './components/BackupDialog';
 import { RecycleBin } from './components/RecycleBin';
 import { CalendarView } from './components/CalendarView';
 import { CategoryModal } from './components/CategoryModal';
@@ -58,6 +58,7 @@ interface BackupModalState {
   available: BackupSelection;
   selected: BackupSelection;
   parsedPayload?: ParsedBackupPayload;
+  selectedCategoryIds?: string[];
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -977,11 +978,59 @@ function App() {
     }
   };
 
+  const getExportCategoriesToSelect = (): CategorySelectionItem[] => {
+    const items: CategorySelectionItem[] = categories.map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      color: cat.color,
+      icon: cat.icon,
+      count: prompts.filter(p => p.categoryId === cat.id).length,
+    }));
+
+    const uncategorizedCount = prompts.filter(p => !p.categoryId || !categories.some(c => c.id === p.categoryId)).length;
+    if (uncategorizedCount > 0) {
+      items.push({
+        id: 'uncategorized',
+        name: 'Uncategorized',
+        count: uncategorizedCount,
+      });
+    }
+
+    return items;
+  };
+
+  const getImportCategoriesToSelect = (parsed: ParsedBackupPayload): CategorySelectionItem[] => {
+    if (!parsed.prompts) return [];
+    const importCategories = parsed.prompts.categories || [];
+    const importPrompts = parsed.prompts.prompts || [];
+
+    const items: CategorySelectionItem[] = importCategories.map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      color: cat.color,
+      icon: cat.icon,
+      count: importPrompts.filter(p => p.categoryId === cat.id).length,
+    }));
+
+    const uncategorizedCount = importPrompts.filter(p => !p.categoryId || !importCategories.some(c => c.id === p.categoryId)).length;
+    if (uncategorizedCount > 0) {
+      items.push({
+        id: 'uncategorized',
+        name: 'Uncategorized',
+        count: uncategorizedCount,
+      });
+    }
+
+    return items;
+  };
+
   const handleExportBackup = async () => {
+    const exportCategories = getExportCategoriesToSelect();
     setBackupDialog({
       mode: 'export',
       available: { prompts: true, theme: true },
       selected: { prompts: true, theme: true },
+      selectedCategoryIds: exportCategories.map(c => c.id),
     });
   };
 
@@ -1016,7 +1065,7 @@ function App() {
     saveCustomModels(merged);
   };
 
-  const buildBackupPayload = (selection: BackupSelection): BackupPayload => {
+  const buildBackupPayload = (selection: BackupSelection, selectedCategoryIds?: string[]): BackupPayload => {
     const payload: BackupPayload = {
       kind: 'promptvault-backup',
       version: 3,
@@ -1024,9 +1073,22 @@ function App() {
     };
 
     if (selection.prompts) {
+      let exportedPrompts = prompts;
+      let exportedCategories = categories;
+
+      if (selectedCategoryIds) {
+        exportedCategories = categories.filter(c => selectedCategoryIds.includes(c.id));
+        exportedPrompts = prompts.filter(p => {
+          const isUncategorized = !p.categoryId || !categories.some(c => c.id === p.categoryId);
+          return isUncategorized
+            ? selectedCategoryIds.includes('uncategorized')
+            : selectedCategoryIds.includes(p.categoryId!);
+        });
+      }
+
       payload.data.prompts = {
-        prompts,
-        categories,
+        prompts: exportedPrompts,
+        categories: exportedCategories,
       };
     }
 
@@ -1041,15 +1103,28 @@ function App() {
     return payload;
   };
 
-  const performImport = async (parsed: ParsedBackupPayload, selection: BackupSelection) => {
+  const performImport = async (parsed: ParsedBackupPayload, selection: BackupSelection, selectedCategoryIds?: string[]) => {
     const hasPrompts = selection.prompts && parsed.prompts;
     const hasTheme = selection.theme && parsed.theme;
 
     if (hasPrompts && parsed.prompts) {
-      const nextPrompts = mergePromptsByIdAndVersion(prompts, parsed.prompts.prompts);
-      const nextCategories = mergeCategoriesWithoutOverwriting(categories, parsed.prompts.categories);
+      let importPrompts = parsed.prompts.prompts;
+      let importCategories = parsed.prompts.categories;
+
+      if (selectedCategoryIds) {
+        importCategories = importCategories.filter(c => selectedCategoryIds.includes(c.id));
+        importPrompts = importPrompts.filter(p => {
+          const isUncategorized = !p.categoryId || !parsed.prompts!.categories.some(c => c.id === p.categoryId);
+          return isUncategorized
+            ? selectedCategoryIds.includes('uncategorized')
+            : selectedCategoryIds.includes(p.categoryId!);
+        });
+      }
+
+      const nextPrompts = mergePromptsByIdAndVersion(prompts, importPrompts);
+      const nextCategories = mergeCategoriesWithoutOverwriting(categories, importCategories);
       await persistDatabase({ prompts: nextPrompts, categories: nextCategories });
-      syncModelsFromPrompts(parsed.prompts.prompts, parsed.theme?.customModels);
+      syncModelsFromPrompts(importPrompts, parsed.theme?.customModels);
     }
 
     if (hasTheme && parsed.theme) {
@@ -1082,7 +1157,7 @@ function App() {
     }
 
     try {
-      const payload = buildBackupPayload(backupDialog.selected);
+      const payload = buildBackupPayload(backupDialog.selected, backupDialog.selectedCategoryIds);
 
       if (backupDialog.mode === 'export') {
         if (!backupDialog.selected.prompts && !backupDialog.selected.theme) {
@@ -1126,7 +1201,7 @@ function App() {
         return;
       }
 
-      await performImport(backupDialog.parsedPayload, backupDialog.selected);
+      await performImport(backupDialog.parsedPayload, backupDialog.selected, backupDialog.selectedCategoryIds);
       setBackupDialog(null);
     } catch (e) {
       console.error('Backup flow failed:', e);
@@ -1140,11 +1215,14 @@ function App() {
       theme: Boolean(parsed.theme),
     };
 
+    const importCategories = getImportCategoriesToSelect(parsed);
+
     setBackupDialog({
       mode: 'import',
       available,
       selected: { ...available },
       parsedPayload: parsed,
+      selectedCategoryIds: importCategories.map(c => c.id),
     });
   };
 
@@ -1518,31 +1596,63 @@ function App() {
           onImportBackup={handleImportBackup}
         />
 
-        {backupDialog && (
-          <BackupDialog
-            isOpen={Boolean(backupDialog)}
-            mode={backupDialog.mode}
-            available={backupDialog.available}
-            selected={backupDialog.selected}
-            onToggle={(option) => {
-              setBackupDialog(prev => {
-                if (!prev || !prev.available[option]) {
-                  return prev;
-                }
+        {backupDialog && (() => {
+          const categoriesToSelect = backupDialog.mode === 'export'
+            ? getExportCategoriesToSelect()
+            : backupDialog.parsedPayload
+              ? getImportCategoriesToSelect(backupDialog.parsedPayload)
+              : [];
+          
+          const isPromptsSelected = backupDialog.selected.prompts;
+          const isThemeSelected = backupDialog.selected.theme;
+          const noCategoriesSelected = !backupDialog.selectedCategoryIds || backupDialog.selectedCategoryIds.length === 0;
+          const confirmDisabled = (!isPromptsSelected && !isThemeSelected) || (isPromptsSelected && noCategoriesSelected);
 
-                const nextSelected = { ...prev.selected, [option]: !prev.selected[option] };
-                if (!nextSelected.prompts && !nextSelected.theme) {
-                  return prev;
-                }
+          return (
+            <BackupDialog
+              isOpen={Boolean(backupDialog)}
+              mode={backupDialog.mode}
+              available={backupDialog.available}
+              selected={backupDialog.selected}
+              onToggle={(option) => {
+                setBackupDialog(prev => {
+                  if (!prev || !prev.available[option]) {
+                    return prev;
+                  }
 
-                return { ...prev, selected: nextSelected };
-              });
-            }}
-            onClose={() => setBackupDialog(null)}
-            onConfirm={handleConfirmBackupDialog}
-            confirmDisabled={!backupDialog.selected.prompts && !backupDialog.selected.theme}
-          />
-        )}
+                  const nextSelected = { ...prev.selected, [option]: !prev.selected[option] };
+                  if (!nextSelected.prompts && !nextSelected.theme) {
+                    return prev;
+                  }
+
+                  return { ...prev, selected: nextSelected };
+                });
+              }}
+              onClose={() => setBackupDialog(null)}
+              onConfirm={handleConfirmBackupDialog}
+              confirmDisabled={confirmDisabled}
+              categoriesToSelect={categoriesToSelect}
+              selectedCategoryIds={backupDialog.selectedCategoryIds}
+              onToggleCategory={(categoryId) => {
+                setBackupDialog(prev => {
+                  if (!prev) return prev;
+                  const currentSelected = prev.selectedCategoryIds || [];
+                  const nextSelected = currentSelected.includes(categoryId)
+                    ? currentSelected.filter(id => id !== categoryId)
+                    : [...currentSelected, categoryId];
+                  return { ...prev, selectedCategoryIds: nextSelected };
+                });
+              }}
+              onSelectAllCategories={(selectAll) => {
+                setBackupDialog(prev => {
+                  if (!prev) return prev;
+                  const nextSelected = selectAll ? categoriesToSelect.map(c => c.id) : [];
+                  return { ...prev, selectedCategoryIds: nextSelected };
+                });
+              }}
+            />
+          );
+        })()}
 
         {/* Action Copy/Save Toast Notification Banner */}
         {notification && (
