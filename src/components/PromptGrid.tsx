@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   Pin, Star, Copy, Check, Flame, Layers, 
-  ExternalLink, CheckSquare, Square, Link2, Plus, Minus
+  ExternalLink, CheckSquare, Square, Link2, Plus, Minus, Info
 } from 'lucide-react';
 import type { Prompt, Category, RawSwitchData } from '../types';
 
@@ -162,6 +162,49 @@ export const PromptGrid: React.FC<PromptGridProps> = ({
 
                 {/* Quick Toggle Actions */}
                 <div className="flex items-center gap-1 shrink-0 z-10 titlebar-nodrag">
+                  {/* Multimedia attachments info tooltip */}
+                  {prompt.switches?.some(s => s.type === 'multimedia' && s.value) && (
+                    <div className="relative group/multimedia z-20">
+                      <button
+                        type="button"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1.5 rounded-md hover:bg-obsidian-800 transition-colors cursor-pointer text-cyber-cyan hover:text-cyber-cyan/85"
+                        title="View attachments"
+                      >
+                        <Info size={12} />
+                      </button>
+                      <div className="absolute right-0 top-full mt-1 w-56 hidden group-hover/multimedia:block bg-obsidian-950/95 backdrop-blur-md border border-obsidian-800 rounded-xl shadow-2xl p-2 z-[200] animate-in fade-in duration-150">
+                        <div className="text-[9px] uppercase tracking-wider text-obsidian-550 font-bold mb-1.5 px-2 py-0.5 border-b border-obsidian-850">
+                          Attached Files
+                        </div>
+                        <div className="space-y-0.5">
+                          {prompt.switches
+                            ?.filter(s => s.type === 'multimedia' && s.value)
+                            .map(sw => {
+                              const ext = sw.value.includes('.') ? sw.value.split('.').pop() : 'file';
+                              const displayName = `${sw.label}.${ext}`;
+                              return (
+                                <button
+                                  key={sw.id}
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (window.api && window.api.openAttachment) {
+                                      await window.api.openAttachment(sw.value);
+                                    }
+                                  }}
+                                  className="w-full text-left text-[11px] text-obsidian-300 hover:text-cyber-cyan hover:bg-obsidian-900/60 px-2 py-1.5 rounded-lg truncate transition-colors cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-cyber-cyan shrink-0 animate-pulse" />
+                                  <span className="truncate flex-1 font-medium">{displayName}</span>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

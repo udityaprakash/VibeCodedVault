@@ -863,10 +863,11 @@ function App() {
         triggerNotification(promptData.id ? 'Prompt template saved.' : 'New prompt template created.');
       } else {
         // Fallback save mock memory
-        if (promptData.id) {
+        const exists = prompts.some(p => p.id === promptData.id);
+        if (promptData.id && exists) {
           setPrompts(prev => prev.map(p => p.id === promptData.id ? { ...p, ...promptData, updatedAt: Date.now(), version: p.version + 1 } as Prompt : p));
         } else {
-          const newPromptId = 'mock_' + Math.random().toString(36).substr(2, 9);
+          const newPromptId = promptData.id || 'mock_' + Math.random().toString(36).substr(2, 9);
           const createdAt = Date.now();
           const newPrompt: Prompt = {
             ...promptData,
