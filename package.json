@@ -17,6 +17,7 @@
     "electron:build": "npm run build && electron-builder"
   },
   "dependencies": {
+    "adm-zip": "^0.6.0",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"

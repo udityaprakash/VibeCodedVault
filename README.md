@@ -1,70 +1,77 @@
 # PromptVault
 
-PromptVault is a local-first Electron desktop app for managing AI prompts, categories, templates, version history, and workspace backups. The current implementation stores data in a JSON file under the Electron user data directory and exposes a safe renderer API through `preload.cjs`.
+PromptVault is a local-first Electron desktop app for managing AI prompts, categories, prompt switches, attachments, version history, trash recovery, workspace backups, and optional AI-assisted workflows. Prompt data lives in a JSON file under Electron user data, while theme, accent, compatibility tags, and AI settings use `localStorage` in the renderer.
 
 ## What It Does
 
-- Create, edit, delete, and save prompts.
+- Create, edit, delete, restore, and permanently remove prompts.
 - Pin and favorite prompts for quick filtering.
-- Copy raw prompt text or compiled prompt output.
-- Organize prompts by categories.
-- Search by title, description, tags, content, and model.
-- Maintain version history for each prompt.
-- Manage theme mode, accent color, and custom AI models.
-- Export and import prompts and theme data through an in-app backup picker.
-- Enforce a 30-character maximum for new category names.
-- Check GitHub releases for updates and launch the latest installer from Settings.
+- Search by title, description, tags, content, category, and model.
+- Compile prompt templates with placeholders and copy either raw or compiled output.
+- Attach files to prompts and reopen saved attachments from the editor or grid.
+- Manage categories, including the 30-character name limit enforced in the UI.
+- Review prompt revision history.
+- Open the recycle bin, calendar view, category dialog, settings modal, and AI agent panel from the main workspace.
+- Switch theme mode and accent color.
+- Add custom compatibility tags for model targeting.
+- Configure AI assistant settings, including provider, API key, and optional local MCP server access.
+- Export and import backups with selectable prompts and theme sections.
+- Check GitHub releases and launch the downloaded installer from Settings.
 
-## Architecture Diagram
+## Architecture
 
 ```mermaid
 flowchart LR
-	U[User] --> R[Renderer: React App]
-
+	U[User] --> A[React Renderer]
 	subgraph Renderer[Renderer Process]
-		A[App.tsx]
-		T[TitleBar]
-		S[Sidebar]
-		G[PromptGrid]
-		E[PromptEditor]
-		C[CommandPalette]
-		M[utils/aiModels.ts]
+		App[App.tsx]
+		TB[TitleBar]
+		SB[Sidebar]
+		PG[PromptGrid]
+		PE[PromptEditor]
+		CP[CommandPalette]
+		BD[BackupDialog]
+		RB[RecycleBin]
+		CV[CalendarView]
+		SM[SettingsModal]
+		AI[AIAgentPanel]
 	end
 
 	subgraph Bridge[Secure Bridge]
-		P[preload.cjs\nwindow.api]
+		Preload[preload.cjs\nwindow.api]
 	end
 
 	subgraph Main[Electron Main Process]
-		I[main.cjs\nipcMain handlers]
-		D[(prompts_db.json\nAppData storage)]
-		F[OS dialogs\nimport/export file pickers]
+		MainJS[main.cjs\nipcMain handlers]
+		DB[(prompts_db.json\nuserData)]
+		Attach[(attachments\nuserData)]
+		Dlg[OS dialogs\nand updater]
 	end
 
-	U --> T
-	U --> S
-	U --> G
-	U --> E
-	U --> C
-	A --> T
-	A --> S
-	A --> G
-	A --> E
-	A --> C
-	A --> M
-	A --> P
-	P --> I
-	I --> D
-	I --> F
-	M --> L[(localStorage\ncustom models + theme)]
-	A --> L
+	U --> TB
+	U --> SB
+	U --> PG
+	U --> PE
+	U --> CP
+	U --> BD
+	U --> RB
+	U --> CV
+	U --> SM
+	U --> AI
+	App --> Preload
+	Preload --> MainJS
+	MainJS --> DB
+	MainJS --> Attach
+	MainJS --> Dlg
+	SM --> L[(localStorage\ntheme, accent, AI settings, custom models)]
+	App --> L
 ```
 
-## User Flow Block Diagram
+## User Flow
 
 ```mermaid
 flowchart TD
-	Start([App opens]) --> Load[Load prompts + categories]
+	Start([App opens]) --> Load[Load prompts, categories, trash, and settings]
 	Load --> Home[Main workspace]
 
 	Home --> Search[Search prompts]
@@ -74,141 +81,56 @@ flowchart TD
 	Home --> FilterCat[Filter by category]
 	Home --> Palette[Open command palette]
 	Home --> NewPrompt[Create new prompt]
-	Home --> ToggleTheme[Toggle light / dark theme]
+	Home --> ToggleTheme[Toggle theme]
 	Home --> Accent[Change accent color]
-	Home --> ModelMgr[Add / delete custom AI models]
-	Home --> AddCat[Create category]
+	Home --> Models[Manage compatibility tags]
+	Home --> AiPanel[Open AI agent panel]
+	Home --> Trash[Open recycle bin]
+	Home --> Calendar[Open calendar view]
 	Home --> Import[Import backup]
 	Home --> Export[Export backup]
-	Home --> Window[Minimize / maximize / close window]
+	Home --> Updates[Check for app updates]
 
-	Search --> Result[Filtered prompt list]
-	FilterAll --> Result
-	FilterFav --> Result
-	FilterPin --> Result
-	FilterCat --> Result
-	Palette --> PaletteSearch[Search prompts or system actions]
+	Search --> Results[Filtered prompt list]
+	FilterAll --> Results
+	FilterFav --> Results
+	FilterPin --> Results
+	FilterCat --> Results
+	Palette --> PaletteSearch[Search prompts or run actions]
 
-	Result --> OpenPrompt[Open prompt editor]
+	Results --> OpenPrompt[Open prompt editor]
 	PaletteSearch --> OpenPrompt
 	NewPrompt --> OpenPrompt
 
-	OpenPrompt --> Edit[Edit title, description, content, tags, category, model]
+	OpenPrompt --> Edit[Edit title, description, content, tags, category, model, switches, attachments]
 	OpenPrompt --> PinFav[Toggle pin / favorite]
 	OpenPrompt --> Compile[Fill placeholders and compile]
 	OpenPrompt --> CopyCompiled[Copy compiled prompt]
-	OpenPrompt --> History[Review revisions]
+	OpenPrompt --> History[Review versions]
 	OpenPrompt --> Save[Save prompt]
-	OpenPrompt --> Delete[Delete prompt]
-
-	Result --> QuickCopy[Copy prompt from card]
-	Result --> QuickPinFav[Toggle pin / favorite from card]
+	OpenPrompt --> Delete[Move to recycle bin]
 
 	Save --> Persist[(Write to prompts_db.json)]
 	Delete --> Persist
-	AddCat --> Persist
-	Import --> Picker[Choose prompts, theme, or both]
-	Picker --> Merge[Merge imported data]
+	Trash --> Restore[Restore or empty deleted prompts]
+	Import --> Pick[Choose prompts and/or theme]
+	Pick --> Merge[Merge imported data]
 	Merge --> Persist
-	Export --> PickerExport[Choose prompts, theme, or both]
-	PickerExport --> File[(Write backup JSON file)]
+	Export --> Write[Write backup JSON file]
 	ToggleTheme --> ThemeState[(Persist theme in localStorage)]
 	Accent --> ThemeState
-	ModelMgr --> ModelState[(Persist custom models in localStorage)]
-	AddCat --> Limit[Clamp category name to 30 chars]
+	Models --> ModelState[(Persist custom compatibility tags)]
+	AiPanel --> AiState[(Persist AI settings in localStorage)]
 ```
 
-## Basic Sequence Diagrams
+## Data And Storage
 
-### 1. Create Or Edit Prompt
-
-```mermaid
-sequenceDiagram
-	participant User
-	participant UI as React UI
-	participant Bridge as window.api
-	participant Main as Electron Main
-	participant DB as prompts_db.json
-
-	User->>UI: Open new prompt or select existing prompt
-	UI->>UI: Fill form fields and optionally add placeholders
-	User->>UI: Click Save
-	UI->>Bridge: savePrompt(payload)
-	Bridge->>Main: db-save-prompt
-	Main->>DB: Read current data
-	Main->>DB: Write prompt + version history
-	Main-->>UI: Return updated database snapshot
-	UI-->>User: Close editor and refresh prompt list
-```
-
-### 2. Search, Open, And Copy Prompt
-
-```mermaid
-sequenceDiagram
-	participant User
-	participant UI as React UI
-	participant Grid as PromptGrid
-	participant Bridge as window.api
-	participant Main as Electron Main
-	participant DB as prompts_db.json
-
-	User->>UI: Type search text or choose a filter
-	UI->>Grid: Render filtered prompt cards
-	User->>Grid: Click a prompt card or Copy
-	alt Open prompt
-		Grid->>UI: onSelectPrompt(promptId)
-		UI->>UI: Open editor panel
-	else Copy prompt text
-		Grid->>Bridge: incrementUsage(promptId)
-		Bridge->>Main: db-increment-usage
-		Main->>DB: Increment usage count
-		Main-->>Grid: Return updated snapshot
-		Grid-->>User: Clipboard updated
-	end
-```
-
-### 3. Backup Export And Import
-
-```mermaid
-sequenceDiagram
-	participant User
-	participant UI as React UI
-	participant Bridge as window.api
-	participant Main as Electron Main
-	participant Modal as Backup Dialog
-	participant Dialog as OS File Dialog
-
-	User->>UI: Choose export or import
-	alt Export backup
-		UI->>Modal: Open backup picker
-		User->>Modal: Toggle prompts / theme
-		UI->>Bridge: exportBackup(payload)
-		Bridge->>Main: db-export-backup
-		Main->>Dialog: Open Save dialog
-		Dialog-->>Main: Return file path
-		Main->>Main: Write JSON backup file
-		Main-->>UI: Success / failure
-		UI-->>User: Close backup dialog on success
-	else Import backup
-		UI->>Bridge: importBackup()
-		Bridge->>Main: db-import-backup
-		Main->>Dialog: Open File picker
-		Dialog-->>Main: Return file path
-		Main->>Main: Read raw JSON backup
-		Main-->>UI: Return raw backup JSON string
-		UI->>UI: Detect prompts-only, theme-only, or combined backup
-		UI->>Modal: Open backup picker with detected sections
-		UI->>UI: Merge selected prompts/categories/settings
-	end
-```
-
-## Persistence Model
-
-- Prompts and categories are persisted in `prompts_db.json` inside Electron `userData`.
-- Theme mode and accent color are persisted in `localStorage`.
-- Custom AI models are persisted in `localStorage` and synchronized across editor and title bar components.
-- Backup files use a version 3 format with separate prompts and theme sections.
-- Import no longer includes legacy backup compatibility.
+- Prompts, categories, and deleted prompts are stored in `prompts_db.json` inside Electron `userData`.
+- Prompt attachments are stored under `userData/attachments`.
+- Theme mode and accent color are stored under the `promptvault-theme-preferences` key in `localStorage`.
+- Custom compatibility tags are stored under the `promptvault-custom-models` key in `localStorage` and broadcast through the `promptvault:custom-models-updated` event.
+- AI assistant settings are stored in `localStorage` under `promptvault-ai-agent-settings`.
+- Backups use version 3 payloads with `kind: promptvault-backup` and separate `prompts` and `theme` sections.
 
 ## Project Scripts
 
@@ -220,14 +142,15 @@ sequenceDiagram
 
 ## Implementation Notes
 
-- `electron/main.cjs` owns window controls, database reads/writes, and backup import/export dialogs.
-- `electron/main.cjs` also checks GitHub releases for app updates and launches the newest installer.
-- `electron/preload.cjs` exposes the `window.api` surface used by the renderer.
-- `src/App.tsx` orchestrates filtering, persistence, notifications, imports, exports, and editor state.
-- `src/components/PromptEditor.tsx` handles prompt editing, template compilation, revision history, and custom model creation.
-- `src/components/Sidebar.tsx` handles category filtering and backup actions.
-- `src/components/PromptGrid.tsx` handles quick copy, pin, and favorite actions.
-- `src/utils/aiModels.ts` manages preset and custom AI model persistence.
+- `electron/main.cjs` owns window controls, prompt persistence, attachment storage, backup import/export dialogs, and update handling.
+- `electron/preload.cjs` exposes the renderer-safe `window.api` bridge.
+- `src/App.tsx` coordinates filtering, prompt editing, import/export flows, trash, calendar, settings, notifications, and the AI agent panel.
+- `src/components/PromptEditor.tsx` handles prompt editing, template compilation, version history, switches, and attachments.
+- `src/components/PromptGrid.tsx` handles quick copy, pin, favorite, and attachment actions.
+- `src/components/BackupDialog.tsx` drives prompt/theme backup selection and category selection.
+- `src/components/RecycleBin.tsx` manages restore, permanent delete, and empty-trash actions.
+- `src/components/SettingsModal.tsx` manages appearance, compatibility tags, AI settings, and release checks.
+- `src/utils/aiModels.ts` manages preset and custom compatibility tag persistence.
 
 ## Development
 

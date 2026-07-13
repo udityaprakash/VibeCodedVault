@@ -83,6 +83,8 @@ export interface IElectronAPI {
   setAllData: (data: DatabaseData) => void;
   exportBackup: (backupPayload: unknown) => Promise<boolean>;
   importBackup: () => Promise<string | false>;
+  selectAndSaveAttachment: (promptId: string) => Promise<string | null>;
+  openAttachment: (fileName: string) => Promise<boolean>;
   checkForUpdates: () => Promise<UpdateInfo | null>;
   updateNow: () => Promise<UpdateInstallResult>;
   installUpdate: () => Promise<UpdateInstallResult>;

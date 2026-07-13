@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Save, Sparkles, Copy, Check, Calendar, History, 
   Layers, Pin, Star, Info, Settings, Eye, Edit, Trash2, Plus,
-  Type, CheckSquare, AlignLeft, Link, Palette, Clock, AlertTriangle
+  Type, CheckSquare, AlignLeft, Link, Palette, Clock, AlertTriangle, Paperclip
 } from 'lucide-react';
 import type { Prompt, Category, RawSwitchData } from '../types';
 import {
@@ -35,7 +35,8 @@ const SWITCH_OPTIONS = [
   { type: 'reminder', name: 'Scheduled Reminder', desc: 'Sets custom time reminders with system notifications', icon: Clock },
   { type: 'delete', name: 'Scheduled Auto Delete', desc: 'Automatically schedules removal of tiles to recycle bin', icon: AlertTriangle },
   { type: 'note', name: 'Calendar Note', desc: 'Overrides default title shown in the calendar view', icon: Calendar },
-  { type: 'counter', name: 'Increment Counter', desc: 'Adds increment/decrement counters to prompt tile', icon: Plus }
+  { type: 'counter', name: 'Increment Counter', desc: 'Adds increment/decrement counters to prompt tile', icon: Plus },
+  { type: 'multimedia', name: 'Multimedia File', desc: 'Adds a file attachment with a custom label', icon: Paperclip }
 ];
 
 export const PromptEditor: React.FC<PromptEditorProps> = ({
@@ -61,6 +62,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   // Switches state
   const [promptSwitches, setPromptSwitches] = useState<RawSwitchData[]>([]);
   const [showAddSwitchMenu, setShowAddSwitchMenu] = useState(false);
+  const [promptId] = useState<string>(() => {
+    return prompt?.id || 'p_' + Math.random().toString(36).substr(2, 9);
+  });
 
   // Tab views
   const [activeTab, setActiveTab] = useState<'editor' | 'compiler' | 'history'>('editor');
@@ -312,7 +316,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     const existingCount = promptSwitches.filter(s => s.type === type).length;
     const isLimitReached = (type === 'textarea')
       ? existingCount >= 3
-      : (type === 'checkbox' || type === 'link' || type === 'counter')
+      : (type === 'checkbox' || type === 'link' || type === 'counter' || type === 'multimedia')
         ? false
         : existingCount >= 1;
     if (isLimitReached) return;
@@ -351,7 +355,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       .filter(tag => tag.length > 0);
 
     onSave({
-      id: prompt?.id,
+      id: promptId,
       title: title.trim(),
       description: description.trim(),
       content: content.trim(),
@@ -828,8 +832,64 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                                   value={sw.value}
                                   onChange={e => handleUpdateSwitchValue(sw.id, parseInt(e.target.value) || 0)}
                                   className="w-full bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300"
-                                  placeholder="0"
+                              placeholder="0"
                                 />
+                              </div>
+                            )}
+
+                            {sw.type === 'multimedia' && (
+                              <div>
+                                <label className="text-[8px] uppercase tracking-wider text-obsidian-550 block mb-0.5">Attached File</label>
+                                {sw.value ? (
+                                  <div className="flex items-center justify-between gap-2 bg-obsidian-950 border border-obsidian-850 rounded px-2.5 py-1 text-[11px] text-obsidian-300">
+                                    <span className="truncate max-w-[150px]" title={sw.value}>{sw.value}</span>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (window.api && window.api.openAttachment) {
+                                            await window.api.openAttachment(sw.value);
+                                          }
+                                        }}
+                                        className="text-cyber-cyan hover:underline text-[9px] uppercase font-bold cursor-pointer transition-all"
+                                      >
+                                        Open
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateSwitchValue(sw.id, '')}
+                                        className="text-cyber-rose hover:underline text-[9px] uppercase font-bold cursor-pointer transition-all"
+                                      >
+                                        Clear
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (window.api && window.api.selectAndSaveAttachment) {
+                                        try {
+                                          const savedName = await window.api.selectAndSaveAttachment(promptId);
+                                          if (savedName) {
+                                            handleUpdateSwitchValue(sw.id, savedName);
+                                          }
+                                        } catch (err) {
+                                          console.error('Failed to select file:', err);
+                                        }
+                                      } else {
+                                        // fallback for browser environment
+                                        const mockName = prompt('Enter mock file name:', 'mock_file.txt');
+                                        if (mockName) {
+                                          handleUpdateSwitchValue(sw.id, mockName);
+                                        }
+                                      }
+                                    }}
+                                    className="w-full bg-obsidian-950 hover:bg-obsidian-900 border border-obsidian-850 hover:border-cyber-cyan text-obsidian-450 hover:text-obsidian-200 rounded px-2.5 py-1 text-[11px] font-semibold text-center cursor-pointer transition-all"
+                                  >
+                                    Choose File...
+                                  </button>
+                                )}
                               </div>
                             )}
 
@@ -1004,7 +1064,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                     const existingCount = promptSwitches.filter(s => s.type === opt.type).length;
                     const isLimitReached = (opt.type === 'textarea')
                       ? existingCount >= 3
-                      : (opt.type === 'checkbox' || opt.type === 'link' || opt.type === 'counter')
+                      : (opt.type === 'checkbox' || opt.type === 'link' || opt.type === 'counter' || opt.type === 'multimedia')
                         ? false
                         : existingCount >= 1;
                     const IconComp = opt.icon;

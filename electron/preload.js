@@ -18,4 +18,6 @@ contextBridge.exposeInMainWorld('api', {
   // Backup / Import API
   exportBackup: (backupPayload, scope) => ipcRenderer.invoke('db-export-backup', backupPayload, scope),
   importBackup: () => ipcRenderer.invoke('db-import-backup'),
+  selectAndSaveAttachment: (promptId) => ipcRenderer.invoke('db-select-save-attachment', promptId),
+  openAttachment: (fileName) => ipcRenderer.invoke('db-open-attachment', fileName),
 });

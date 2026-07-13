@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('api', {
   // Backup / Import API
   exportBackup: (backupPayload) => ipcRenderer.invoke('db-export-backup', backupPayload),
   importBackup: () => ipcRenderer.invoke('db-import-backup'),
+  selectAndSaveAttachment: (promptId) => ipcRenderer.invoke('db-select-save-attachment', promptId),
+  openAttachment: (fileName) => ipcRenderer.invoke('db-open-attachment', fileName),
 
   // Application updates
   checkForUpdates: () => ipcRenderer.invoke('app-check-for-updates'),

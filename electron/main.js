@@ -10,6 +10,10 @@ let isQuitting = false;
 // Define storage file paths in the standard AppData folder
 const userDataPath = app.getPath('userData');
 const dbFilePath = path.join(userDataPath, 'prompts_db.json');
+const attachmentsPath = path.join(userDataPath, 'attachments');
+if (!fs.existsSync(attachmentsPath)) {
+  fs.mkdirSync(attachmentsPath, { recursive: true });
+}
 
 // Helper to seed initial high-quality prompts and categories
 function getSeedData() {
@@ -448,16 +452,69 @@ ipcMain.on('db-set-all', (event, data) => {
 // ==========================================
 // IPC HANDLERS - EXPORT / IMPORT BACKUPS
 // ==========================================
+function getReferencedAttachments(backupPayload) {
+  const fileNames = [];
+  if (backupPayload && backupPayload.data && backupPayload.data.prompts && Array.isArray(backupPayload.data.prompts.prompts)) {
+    backupPayload.data.prompts.prompts.forEach(p => {
+      if (Array.isArray(p.switches)) {
+        p.switches.forEach(sw => {
+          if (sw.type === 'multimedia' && typeof sw.value === 'string' && sw.value) {
+            fileNames.push(sw.value);
+          }
+        });
+      }
+    });
+  }
+  return fileNames;
+}
+
+ipcMain.handle('db-select-save-attachment', async (event, promptId) => {
+  if (!mainWindow) return null;
+  try {
+    const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select File to Attach',
+      properties: ['openFile']
+    });
+    if (!filePaths || filePaths.length === 0) {
+      return null;
+    }
+    const sourcePath = filePaths[0];
+    const randomKey = Math.random().toString(36).substr(2, 6);
+    const baseOriginalName = path.basename(sourcePath);
+    const uniqueName = `${promptId}_${randomKey}_${baseOriginalName}`;
+    const targetPath = path.join(attachmentsPath, uniqueName);
+    fs.copyFileSync(sourcePath, targetPath);
+    return uniqueName;
+  } catch (e) {
+    console.error('Failed to select and save attachment:', e);
+    return null;
+  }
+});
+
+ipcMain.handle('db-open-attachment', async (event, fileName) => {
+  try {
+    const fullPath = path.join(attachmentsPath, path.basename(fileName));
+    if (!fs.existsSync(fullPath)) {
+      throw new Error(`File does not exist: ${fullPath}`);
+    }
+    await shell.openPath(fullPath);
+    return true;
+  } catch (e) {
+    console.error('Failed to open attachment:', e);
+    return false;
+  }
+});
+
 ipcMain.handle('db-export-backup', async (event, backupPayload, scope = 'workspace') => {
   if (!mainWindow) return false;
 
   const defaultFileName =
-    scope === 'prompts' ? 'promptvault_prompts_backup.json' : 'promptvault_workspace_backup.json';
+    scope === 'prompts' ? 'promptvault_prompts_backup.zip' : 'promptvault_workspace_backup.zip';
   
   const { filePath } = await dialog.showSaveDialog(mainWindow, {
     title: 'Export PromptVault Backup',
     defaultPath: path.join(app.getPath('downloads'), defaultFileName),
-    filters: [{ name: 'JSON Files', extensions: ['json'] }]
+    filters: [{ name: 'Zip Files', extensions: ['zip'] }]
   });
   
   if (!filePath) return false;
@@ -466,7 +523,24 @@ ipcMain.handle('db-export-backup', async (event, backupPayload, scope = 'workspa
     if (!backupPayload) {
       return false;
     }
-    fs.writeFileSync(filePath, JSON.stringify(backupPayload, null, 2), 'utf-8');
+    
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    
+    // Add backup.json
+    const jsonStr = JSON.stringify(backupPayload, null, 2);
+    zip.addFile('backup.json', Buffer.from(jsonStr, 'utf-8'));
+    
+    // Add referenced attachment files
+    const attachedFiles = getReferencedAttachments(backupPayload);
+    attachedFiles.forEach(fileName => {
+      const fileAttachmentPath = path.join(attachmentsPath, fileName);
+      if (fs.existsSync(fileAttachmentPath)) {
+        zip.addLocalFile(fileAttachmentPath, 'prompt-files');
+      }
+    });
+    
+    zip.writeZip(filePath);
     return true;
   } catch (e) {
     console.error('Export failed:', e);
@@ -479,17 +553,35 @@ ipcMain.handle('db-import-backup', async () => {
   
   const { filePaths } = await dialog.showOpenDialog(mainWindow, {
     title: 'Import PromptVault Backup',
-    filters: [{ name: 'JSON Files', extensions: ['json'] }],
+    filters: [{ name: 'Zip Files', extensions: ['zip'] }],
     properties: ['openFile']
   });
   
   if (!filePaths || filePaths.length === 0) return false;
   
   try {
-    const backupStr = fs.readFileSync(filePaths[0], 'utf-8');
-    const backupData = JSON.parse(backupStr);
-
-    return backupData;
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip(filePaths[0]);
+    const zipEntries = zip.getEntries();
+    
+    let backupStr = null;
+    
+    zipEntries.forEach(entry => {
+      if (entry.isDirectory) return;
+      if (entry.entryName === 'backup.json') {
+        backupStr = entry.getData().toString('utf8');
+      } else {
+        const baseName = path.basename(entry.entryName);
+        const targetPath = path.join(attachmentsPath, baseName);
+        fs.writeFileSync(targetPath, entry.getData());
+      }
+    });
+    
+    if (!backupStr) {
+      throw new Error('Invalid backup file: backup.json not found inside zip.');
+    }
+    
+    return backupStr;
   } catch (e) {
     console.error('Import failed:', e);
     return false;

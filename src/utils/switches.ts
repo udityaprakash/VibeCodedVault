@@ -232,6 +232,24 @@ export class CounterSwitch extends PromptSwitch {
   }
 }
 
+export class MultimediaSwitch extends PromptSwitch {
+  constructor(id: string, label = 'Attachment Label', value = '') {
+    super(id, 'multimedia', label, value);
+  }
+
+  clone(): MultimediaSwitch {
+    return new MultimediaSwitch(this.id, this.label, this.value);
+  }
+
+  toRaw(): RawSwitchData {
+    return { id: this.id, type: this.type, label: this.label, value: this.value };
+  }
+
+  validate(): boolean {
+    return typeof this.value === 'string' && typeof this.label === 'string';
+  }
+}
+
 // TODO: Implement SwitchFactory for instantiation and defaults
 export class SwitchFactory {
   static create(raw: RawSwitchData): PromptSwitch {
@@ -262,6 +280,8 @@ export class SwitchFactory {
         return new NoteSwitch(raw.id, raw.label, raw.value);
       case 'counter':
         return new CounterSwitch(raw.id, raw.label, raw.value);
+      case 'multimedia':
+        return new MultimediaSwitch(raw.id, raw.label, raw.value);
       default:
         throw new Error(`Unknown switch type: ${raw.type}`);
     }
@@ -290,6 +310,8 @@ export class SwitchFactory {
         return new NoteSwitch(id, 'Calendar Note Override', '');
       case 'counter':
         return new CounterSwitch(id, 'Counter', 0);
+      case 'multimedia':
+        return new MultimediaSwitch(id, 'Attachment Label', '');
       default:
         throw new Error(`Unknown switch type: ${type}`);
     }
