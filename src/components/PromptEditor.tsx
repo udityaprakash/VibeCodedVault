@@ -879,7 +879,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                                         }
                                       } else {
                                         // fallback for browser environment
-                                        const mockName = prompt('Enter mock file name:', 'mock_file.txt');
+                                        const mockName = window.prompt('Enter mock file name:', 'mock_file.txt');
                                         if (mockName) {
                                           handleUpdateSwitchValue(sw.id, mockName);
                                         }
