@@ -152,6 +152,28 @@ flowchart TD
 - `src/components/SettingsModal.tsx` manages appearance, compatibility tags, AI settings, and release checks.
 - `src/utils/aiModels.ts` manages preset and custom compatibility tag persistence.
 
+## Limitations and Scalability
+
+PromptVault is designed as a local-first desktop productivity tool, so its current architecture favors simplicity, privacy, and offline reliability over enterprise-scale collaboration.
+
+### Current limitations
+
+- The app is primarily single-user and local-first. Prompt data is stored on the device rather than synced across machines or shared with other users.
+- Prompt storage currently relies on a JSON file in Electron user data. This is simple and reliable, but larger prompt libraries may become slower to load and manage.
+- Search, filtering, and history operations are optimized for everyday use, but they may become less responsive as the number of prompts, attachments, and revisions grows.
+- Attachment handling is local-only. Files are stored alongside prompt data rather than through a remote storage or cloud-backed system.
+- AI-assisted features depend on external providers, API keys, and network availability, so they are not fully self-contained or offline-independent.
+- Backup and restore workflows are manual file-based operations rather than continuous sync or versioned collaboration tools.
+
+### Scalability outlook
+
+- For personal productivity and small-team usage, the current architecture is practical and easy to maintain.
+- The app can scale modestly by improving indexing, lazy loading, and pagination for large prompt libraries.
+- For larger deployments, the next logical step would be moving from flat JSON storage to a structured database and adding sync, permissions, and multi-user collaboration features.
+- In its current form, PromptVault is best understood as a focused desktop tool for organizing prompts and AI workflows rather than a large-scale multi-user platform.
+- In practical terms, the app should remain smooth for around 1,000–3,000 prompts, still feel usable around 5,000 prompts, and may begin to slow noticeably beyond 10,000 prompts.
+- The main bottlenecks are not prompt ID generation, but the volume of prompt data being loaded, filtered, searched, and rendered in the UI.
+
 ## Development
 
 Install dependencies and start the desktop app with:
