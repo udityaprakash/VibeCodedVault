@@ -659,3 +659,16 @@ ipcMain.handle('db-import-backup', async () => {
     return false;
   }
 });
+
+ipcMain.handle('app-get-readme', async () => {
+  try {
+    const readmePath = path.join(__dirname, '..', 'README.md');
+    if (fs.existsSync(readmePath)) {
+      return fs.readFileSync(readmePath, 'utf-8');
+    }
+    return 'PromptVault is a local-first Electron desktop app...';
+  } catch (e) {
+    console.error('Failed to read README.md:', e);
+    return '';
+  }
+});

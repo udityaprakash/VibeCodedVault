@@ -56,7 +56,8 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "README.md"
     ],
     "win": {
       "target": [

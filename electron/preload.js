@@ -20,4 +20,5 @@ contextBridge.exposeInMainWorld('api', {
   importBackup: () => ipcRenderer.invoke('db-import-backup'),
   selectAndSaveAttachment: (promptId) => ipcRenderer.invoke('db-select-save-attachment', promptId),
   openAttachment: (fileName) => ipcRenderer.invoke('db-open-attachment', fileName),
+  getReadmeContent: () => ipcRenderer.invoke('app-get-readme'),
 });

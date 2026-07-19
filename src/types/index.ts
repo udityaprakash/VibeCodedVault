@@ -85,6 +85,7 @@ export interface IElectronAPI {
   importBackup: () => Promise<string | false>;
   selectAndSaveAttachment: (promptId: string) => Promise<string | null>;
   openAttachment: (fileName: string) => Promise<boolean>;
+  getReadmeContent: () => Promise<string>;
   checkForUpdates: () => Promise<UpdateInfo | null>;
   updateNow: () => Promise<UpdateInstallResult>;
   installUpdate: () => Promise<UpdateInstallResult>;
