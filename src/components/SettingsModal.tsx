@@ -574,7 +574,6 @@ function renderMarkdown(md: string) {
   let listItems: string[] = [];
   let inCodeBlock = false;
   let codeLines: string[] = [];
-  let codeLang = '';
 
   const flushList = (key: string | number) => {
     if (listItems.length > 0) {
@@ -611,7 +610,6 @@ function renderMarkdown(md: string) {
       } else {
         flushList(i);
         inCodeBlock = true;
-        codeLang = line.replace('```', '').trim();
       }
       continue;
     }
