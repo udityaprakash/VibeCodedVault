@@ -182,10 +182,13 @@ function garbageCollectAttachments(db) {
     const referenced = collectReferencedAttachmentNames(db);
     const attachmentFiles = fs.readdirSync(attachmentsPath);
 
+    console.log(`[GC] Starting garbage collection. Referenced files count: ${referenced.size}, Total files on disk: ${attachmentFiles.length}`);
+
     attachmentFiles.forEach(fileName => {
       if (!referenced.has(fileName)) {
         const fullPath = path.join(attachmentsPath, fileName);
         if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isFile()) {
+          console.log(`[GC] Deleting unreferenced attachment: ${fileName}`);
           fs.unlinkSync(fullPath);
         }
       }
@@ -212,7 +215,6 @@ function readDatabase() {
       }
     }
 
-    garbageCollectAttachments(db);
     if (databaseChanged) {
       writeDatabase(db);
     }
@@ -225,6 +227,7 @@ function readDatabase() {
 
 function writeDatabase(data) {
   try {
+    garbageCollectAttachments(data);
     fs.writeFileSync(dbFilePath, JSON.stringify(data, null, 2), 'utf-8');
     return true;
   } catch (e) {
@@ -711,6 +714,12 @@ if (process.platform === 'win32') {
 app.whenReady().then(() => {
   cleanupOldInstallers();
   initDatabase();
+  try {
+    const db = readDatabase();
+    garbageCollectAttachments(db);
+  } catch (e) {
+    console.error('Failed to run startup GC:', e);
+  }
   createWindow();
   createTray();
 

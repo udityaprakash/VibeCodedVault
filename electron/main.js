@@ -97,11 +97,76 @@ function initDatabase() {
   }
 }
 
+function getPromptAttachmentFileNames(prompt) {
+  if (!prompt || !Array.isArray(prompt.switches)) {
+    return [];
+  }
+
+  return prompt.switches
+    .filter(sw => sw && sw.type === 'multimedia' && typeof sw.value === 'string' && sw.value.trim())
+    .map(sw => path.basename(sw.value.trim()));
+}
+
+function collectReferencedAttachmentNames(db) {
+  const referencedNames = new Set();
+  const promptGroups = [db?.prompts, db?.deletedPrompts];
+
+  promptGroups.forEach(group => {
+    if (!Array.isArray(group)) return;
+    group.forEach(prompt => {
+      getPromptAttachmentFileNames(prompt).forEach(fileName => referencedNames.add(fileName));
+    });
+  });
+
+  return referencedNames;
+}
+
+function garbageCollectAttachments(db) {
+  try {
+    if (!fs.existsSync(attachmentsPath)) {
+      return;
+    }
+
+    const referenced = collectReferencedAttachmentNames(db);
+    const attachmentFiles = fs.readdirSync(attachmentsPath);
+
+    console.log(`[GC] Starting garbage collection. Referenced files count: ${referenced.size}, Total files on disk: ${attachmentFiles.length}`);
+
+    attachmentFiles.forEach(fileName => {
+      if (!referenced.has(fileName)) {
+        const fullPath = path.join(attachmentsPath, fileName);
+        if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isFile()) {
+          console.log(`[GC] Deleting unreferenced attachment: ${fileName}`);
+          fs.unlinkSync(fullPath);
+        }
+      }
+    });
+  } catch (e) {
+    console.error('Failed to garbage-collect attachments:', e);
+  }
+}
+
 function readDatabase() {
   initDatabase();
   try {
     const dataStr = fs.readFileSync(dbFilePath, 'utf-8');
-    return JSON.parse(dataStr);
+    const db = JSON.parse(dataStr);
+    let databaseChanged = false;
+    
+    // Purge trash items older than 30 days
+    if (db.deletedPrompts && Array.isArray(db.deletedPrompts)) {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const originalLength = db.deletedPrompts.length;
+      db.deletedPrompts = db.deletedPrompts.filter(p => p.deletedAt && p.deletedAt > thirtyDaysAgo);
+      if (db.deletedPrompts.length !== originalLength) {
+        databaseChanged = true;
+      }
+    }
+
+    if (databaseChanged) {
+      writeDatabase(db);
+    }
+    return db;
   } catch (e) {
     console.error('Failed to read database, returning default seed:', e);
     return getSeedData();
@@ -110,6 +175,7 @@ function readDatabase() {
 
 function writeDatabase(data) {
   try {
+    garbageCollectAttachments(data);
     fs.writeFileSync(dbFilePath, JSON.stringify(data, null, 2), 'utf-8');
     return true;
   } catch (e) {
@@ -293,6 +359,12 @@ if (process.platform === 'win32') {
 // Ensure database exists
 app.whenReady().then(() => {
   initDatabase();
+  try {
+    const db = readDatabase();
+    garbageCollectAttachments(db);
+  } catch (e) {
+    console.error('Failed to run startup GC:', e);
+  }
   createWindow();
   createTray();
 
