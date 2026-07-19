@@ -566,6 +566,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   );
 };
 
+
 function renderMarkdown(md: string) {
   const lines = md.split('\n');
   const elements: React.ReactNode[] = [];
