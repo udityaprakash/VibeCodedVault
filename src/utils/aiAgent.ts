@@ -146,7 +146,13 @@ CRITICAL RULES:
 `;
 
 export async function runAgentCycle(
-  history: Array<{ role: 'user' | 'assistant' | 'tool'; content: string; name?: string; tool_call_id?: string }>,
+  history: Array<{
+    role: 'user' | 'assistant' | 'tool';
+    content: string;
+    name?: string;
+    tool_call_id?: string;
+    tool_calls?: any[];
+  }>,
   settings: AIAgentSettings,
   context: AgentContext,
   onToolLog: (log: { name: string; args: any; status: 'running' | 'success' | 'error'; result?: string }) => void
@@ -261,33 +267,75 @@ export async function runAgentCycle(
     }
 
   } else {
-    // --- OPENAI FLOW ---
+    // --- OPENAI-Compatible FLOW (OpenAI + OpenRouter) ---
     try {
-      const messages = activeHistory.map(msg => {
+      const rawMessages = activeHistory.map(msg => {
         if (msg.role === 'tool') {
           return {
-            role: 'tool',
+            role: 'tool' as const,
             content: msg.content,
             tool_call_id: msg.tool_call_id
           };
         }
+        if (msg.role === 'assistant' && msg.tool_calls) {
+          return {
+            role: 'assistant' as const,
+            content: msg.content || null,
+            tool_calls: msg.tool_calls
+          };
+        }
         return {
-          role: msg.role === 'assistant' ? 'assistant' : 'user',
+          role: msg.role === 'assistant' ? ('assistant' as const) : ('user' as const),
           content: msg.content
         };
+      });
+
+      // Filter rawMessages to ensure tool call messages are valid.
+      // Every 'tool' message MUST have a matching preceding 'assistant' message with 'tool_calls' containing that tool_call_id.
+      // If it doesn't, we drop the 'tool' message.
+      const assistantToolCallIds = new Set<string>();
+      rawMessages.forEach(msg => {
+        if (msg.role === 'assistant' && msg.tool_calls) {
+          msg.tool_calls.forEach((tc: any) => {
+            if (tc.id) {
+              assistantToolCallIds.add(tc.id);
+            }
+          });
+        }
+      });
+
+      const messages = rawMessages.filter(msg => {
+        if (msg.role === 'tool') {
+          return msg.tool_call_id && assistantToolCallIds.has(msg.tool_call_id);
+        }
+        return true;
       });
 
       // Insert system prompt at the top
       messages.unshift({ role: 'system', content: SYSTEM_PROMPT } as any);
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const isOpenRouter = settings.provider === 'openrouter';
+      const endpoint = isOpenRouter
+        ? 'https://openrouter.ai/api/v1/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions';
+      const model = isOpenRouter
+        ? (settings.model?.trim() || 'openai/gpt-4o-mini')
+        : 'gpt-4o-mini';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${settings.apiKey}`
+      };
+
+      if (isOpenRouter) {
+        headers['HTTP-Referer'] = 'https://promptvault.app';
+        headers['X-Title'] = 'PromptVault';
+      }
+
+      const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.apiKey}`
-        },
+        headers,
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model,
           messages,
           tools: getOpenAITools(),
           temperature: 0.1
@@ -296,7 +344,7 @@ export async function runAgentCycle(
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`OpenAI API Error: ${response.status} - ${errorText}`);
+        throw new Error(`${isOpenRouter ? 'OpenRouter' : 'OpenAI'} API Error: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -309,38 +357,39 @@ export async function runAgentCycle(
 
       // Check for tool calls
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-        const toolCall = responseMessage.tool_calls[0];
-        const { name, arguments: rawArgs } = toolCall.function;
-        const args = JSON.parse(rawArgs);
-
-        onToolLog({ name, args, status: 'running' });
-
-        let toolResult: any;
-        try {
-          toolResult = await executeTool(name, args, context);
-          onToolLog({ name, args, status: 'success', result: JSON.stringify(toolResult) });
-        } catch (err: any) {
-          onToolLog({ name, args, status: 'error', result: err.message });
-          toolResult = { error: err.message };
-        }
-
-        // Add assistant's tool call message
+        // Add assistant's tool call message containing all tool calls requested
         activeHistory.push({
           role: 'assistant',
           content: responseMessage.content || '',
-          name: name,
-          tool_call_id: toolCall.id
+          tool_calls: responseMessage.tool_calls
         });
 
-        // Add tool response
-        activeHistory.push({
-          role: 'tool',
-          content: JSON.stringify(toolResult),
-          name: name,
-          tool_call_id: toolCall.id
-        });
+        // Execute all tool calls sequentially to prevent race conditions on the local DB
+        for (const toolCall of responseMessage.tool_calls) {
+          const { name, arguments: rawArgs } = toolCall.function;
+          const args = JSON.parse(rawArgs);
 
-        // Recurse
+          onToolLog({ name, args, status: 'running' });
+
+          let toolResult: any;
+          try {
+            toolResult = await executeTool(name, args, context);
+            onToolLog({ name, args, status: 'success', result: JSON.stringify(toolResult) });
+          } catch (err: any) {
+            onToolLog({ name, args, status: 'error', result: err.message });
+            toolResult = { error: err.message };
+          }
+
+          // Add tool response for this specific tool call ID
+          activeHistory.push({
+            role: 'tool',
+            content: JSON.stringify(toolResult),
+            name: name,
+            tool_call_id: toolCall.id
+          });
+        }
+
+        // Recurse after executing all tools
         return runAgentCycle(activeHistory, settings, context, onToolLog);
       }
 

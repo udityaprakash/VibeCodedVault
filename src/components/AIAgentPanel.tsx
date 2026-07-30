@@ -3,6 +3,7 @@ import { X, Send, Bot, User, Cpu, RefreshCw, Trash2, Maximize2, Minimize2, Spark
 import type { AIAgentSettings, ChatMessage, Prompt, Category } from '../types';
 import { runAgentCycle } from '../utils/aiAgent';
 import type { AgentContext } from '../utils/aiAgent';
+import { renderMarkdown } from '../utils/markdown';
 
 interface AIAgentPanelProps {
   isOpen: boolean;
@@ -285,7 +286,7 @@ export const AIAgentPanel: React.FC<AIAgentPanelProps> = ({
                       ? 'bg-cyber-violet text-white shadow-glow-violet rounded-tr-none'
                       : 'bg-obsidian-900 border border-obsidian-800 text-obsidian-200 rounded-tl-none select-text'
                   }`}>
-                    {msg.text}
+                    {isUser ? msg.text : renderMarkdown(msg.text)}
                   </div>
                 </div>
               );

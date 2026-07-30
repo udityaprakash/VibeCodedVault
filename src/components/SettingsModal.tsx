@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Palette, Moon, Sun, Tag, Cpu, Bot, Check, Trash2, Plus, Server, Eye, EyeOff, RefreshCw, Download, Info } from 'lucide-react';
 import { PRESET_MODELS, getCustomModels, saveCustomModels, normalizeModelName, resolveExistingModelName } from '../utils/aiModels';
 import type { AIAgentSettings, UpdateInfo } from '../types';
+import { renderMarkdown } from '../utils/markdown';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -55,8 +56,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // AI Settings state
   const [aiEnabled, setAiEnabled] = useState(aiSettings.enabled);
-  const [aiProvider, setAiProvider] = useState<'gemini' | 'openai'>(aiSettings.provider);
+  const [aiProvider, setAiProvider] = useState<AIAgentSettings['provider']>(aiSettings.provider);
   const [aiApiKey, setAiApiKey] = useState(aiSettings.apiKey);
+  const [aiModel, setAiModel] = useState(aiSettings.model || '');
   const [serverEnabled, setServerEnabled] = useState(aiSettings.serverEnabled);
   const [serverPort, setServerPort] = useState(aiSettings.serverPort || 3015);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -72,6 +74,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setAiEnabled(aiSettings.enabled);
       setAiProvider(aiSettings.provider);
       setAiApiKey(aiSettings.apiKey);
+      setAiModel(aiSettings.model || '');
       setServerEnabled(aiSettings.serverEnabled);
       setServerPort(aiSettings.serverPort || 3015);
 
@@ -120,6 +123,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       enabled: aiEnabled,
       provider: aiProvider,
       apiKey: aiApiKey.trim(),
+      model: aiModel.trim(),
       serverEnabled,
       serverPort: Number(serverPort) || 3015
     });
@@ -355,11 +359,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">LLM Provider</label>
                         <select
                           value={aiProvider}
-                          onChange={e => setAiProvider(e.target.value as 'gemini' | 'openai')}
+                          onChange={e => setAiProvider(e.target.value as AIAgentSettings['provider'])}
                           className="w-full bg-obsidian-950 border border-obsidian-850 rounded-lg px-3 py-1.5 text-xs text-obsidian-200 focus-glow-violet"
                         >
                           <option value="gemini">Gemini Developer API</option>
                           <option value="openai">OpenAI API</option>
+                          <option value="openrouter">OpenRouter API</option>
                         </select>
                       </div>
 
@@ -368,7 +373,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="relative flex items-center">
                           <input
                             type={showApiKey ? 'text' : 'password'}
-                            placeholder={aiProvider === 'gemini' ? 'Gemini API Key...' : 'OpenAI Secret Key...'}
+                            placeholder={
+                              aiProvider === 'gemini'
+                                ? 'Gemini API Key...'
+                                : aiProvider === 'openrouter'
+                                  ? 'OpenRouter API Key...'
+                                  : 'OpenAI Secret Key...'
+                            }
                             value={aiApiKey}
                             onChange={e => setAiApiKey(e.target.value)}
                             className="w-full bg-obsidian-950 border border-obsidian-850 rounded-lg pl-3 pr-10 py-1.5 text-xs text-obsidian-200 focus-glow-violet"
@@ -383,6 +394,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                       </div>
                     </div>
+
+                    {aiProvider === 'openrouter' && (
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-obsidian-400 tracking-wider block mb-1.5">OpenRouter Model</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. openai/gpt-4o-mini or anthropic/claude-3.5-sonnet"
+                          value={aiModel}
+                          onChange={e => setAiModel(e.target.value)}
+                          className="w-full bg-obsidian-950 border border-obsidian-850 rounded-lg px-3 py-1.5 text-xs text-obsidian-200 focus-glow-violet"
+                        />
+                        <p className="text-[10px] text-obsidian-500 mt-1">Use any model supported by OpenRouter. Leave blank to use a sensible default.</p>
+                      </div>
+                    )}
 
                     <div className="bg-obsidian-950/30 border border-obsidian-850 rounded-xl p-4 space-y-4">
                       <div className="flex items-center justify-between">
@@ -567,155 +592,4 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 };
 
 
-function renderMarkdown(md: string) {
-  const lines = md.split('\n');
-  const elements: React.ReactNode[] = [];
-  let inList = false;
-  let listItems: string[] = [];
-  let inCodeBlock = false;
-  let codeLines: string[] = [];
 
-  const flushList = (key: string | number) => {
-    if (listItems.length > 0) {
-      elements.push(
-        <ul key={`ul-${key}`} className="list-disc pl-5 my-2 space-y-1 text-xs text-obsidian-350">
-          {listItems.map((item, idx) => (
-            <li key={idx}>{parseInlineMarkdown(item)}</li>
-          ))}
-        </ul>
-      );
-      listItems = [];
-    }
-    inList = false;
-  };
-
-  const flushCode = (key: string | number) => {
-    if (codeLines.length > 0) {
-      elements.push(
-        <pre key={`code-${key}`} className="bg-obsidian-950/80 border border-obsidian-850 p-3 rounded-lg my-2 overflow-x-auto text-[10px] text-cyber-cyan font-mono leading-relaxed">
-          <code>{codeLines.join('\n')}</code>
-        </pre>
-      );
-      codeLines = [];
-    }
-    inCodeBlock = false;
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.trim().startsWith('```')) {
-      if (inCodeBlock) {
-        flushCode(i);
-      } else {
-        flushList(i);
-        inCodeBlock = true;
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeLines.push(line);
-      continue;
-    }
-
-    if (line.startsWith('# ')) {
-      flushList(i);
-      elements.push(
-        <h1 key={i} className="text-base font-bold text-obsidian-100 mt-4 mb-2 border-b border-obsidian-850 pb-1">
-          {parseInlineMarkdown(line.slice(2))}
-        </h1>
-      );
-      continue;
-    }
-    if (line.startsWith('## ')) {
-      flushList(i);
-      elements.push(
-        <h2 key={i} className="text-xs font-extrabold text-cyber-cyan mt-4 mb-2">
-          {parseInlineMarkdown(line.slice(3))}
-        </h2>
-      );
-      continue;
-    }
-    if (line.startsWith('### ')) {
-      flushList(i);
-      elements.push(
-        <h3 key={i} className="text-[11px] font-bold text-obsidian-200 mt-3 mb-1">
-          {parseInlineMarkdown(line.slice(4))}
-        </h3>
-      );
-      continue;
-    }
-
-    if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-      inList = true;
-      listItems.push(line.trim().slice(2));
-      continue;
-    }
-
-    if (!line.trim()) {
-      flushList(i);
-      continue;
-    }
-
-    if (inList) {
-      flushList(i);
-    }
-    elements.push(
-      <p key={i} className="text-xs text-obsidian-350 leading-relaxed my-1.5">
-        {parseInlineMarkdown(line)}
-      </p>
-    );
-  }
-
-  flushList('end');
-  flushCode('end');
-  return <div className="space-y-1">{elements}</div>;
-}
-
-function parseInlineMarkdown(text: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
-  let currentText = text;
-
-  const tokenRegex = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g;
-  const segments = currentText.split(tokenRegex);
-
-  segments.forEach((seg, idx) => {
-    if (seg.startsWith('`') && seg.endsWith('`')) {
-      parts.push(
-        <code key={idx} className="bg-obsidian-900 border border-obsidian-800 text-[10px] text-cyber-rose font-mono px-1 py-0.5 rounded mx-0.5">
-          {seg.slice(1, -1)}
-        </code>
-      );
-    } else if (seg.startsWith('**') && seg.endsWith('**')) {
-      parts.push(<strong key={idx} className="font-extrabold text-obsidian-100">{seg.slice(2, -2)}</strong>);
-    } else if (seg.startsWith('[') && seg.includes('](')) {
-      const match = seg.match(/\[([^\]]+)\]\(([^)]+)\)/);
-      if (match) {
-        parts.push(
-          <a
-            key={idx}
-            href={match[2]}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => {
-              if (window.api && (window.api as any).openExternal) {
-                e.preventDefault();
-                (window.api as any).openExternal(match[2]);
-              }
-            }}
-            className="text-cyber-cyan hover:underline font-semibold"
-          >
-            {match[1]}
-          </a>
-        );
-      } else {
-        parts.push(seg);
-      }
-    } else {
-      parts.push(seg);
-    }
-  });
-
-  return parts;
-}

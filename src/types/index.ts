@@ -105,8 +105,9 @@ export interface IElectronAPI {
 
 export interface AIAgentSettings {
   enabled: boolean;
-  provider: 'gemini' | 'openai';
+  provider: 'gemini' | 'openai' | 'openrouter';
   apiKey: string;
+  model?: string;
   serverEnabled: boolean;
   serverPort: number;
 }

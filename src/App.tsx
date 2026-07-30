@@ -408,6 +408,7 @@ const DEFAULT_AI_SETTINGS: AIAgentSettings = {
   enabled: false,
   provider: 'gemini',
   apiKey: '',
+  model: '',
   serverEnabled: false,
   serverPort: 3015
 };
