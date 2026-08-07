@@ -712,16 +712,20 @@ if (process.platform === 'win32') {
 
 // Ensure database exists
 app.whenReady().then(() => {
-  cleanupOldInstallers();
   initDatabase();
-  try {
-    const db = readDatabase();
-    garbageCollectAttachments(db);
-  } catch (e) {
-    console.error('Failed to run startup GC:', e);
-  }
   createWindow();
   createTray();
+
+  // Defer non-critical filesystem cleanup operations to prevent blocking app startup
+  setTimeout(() => {
+    cleanupOldInstallers();
+    try {
+      const db = readDatabase();
+      garbageCollectAttachments(db);
+    } catch (e) {
+      console.error('Failed to run startup GC:', e);
+    }
+  }, 5000);
 
   setInterval(scanSchedules, 10000);
 
