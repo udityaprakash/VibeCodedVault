@@ -922,6 +922,9 @@ ipcMain.on('db-set-all', (event, data) => {
     categories: data.categories,
     prompts: data.prompts,
     deletedPrompts: data.deletedPrompts || [],
+    themeMode: data.themeMode,
+    accentColor: data.accentColor,
+    aiSettings: data.aiSettings,
   });
 });
 

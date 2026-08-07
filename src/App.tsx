@@ -828,6 +828,51 @@ function App() {
         setPrompts(data.prompts || []);
         setCategories(data.categories || []);
         setDeletedPrompts(data.deletedPrompts || []);
+        
+        // Theme mode loading
+        if (data.themeMode === 'light' || data.themeMode === 'dark') {
+          setThemeMode(data.themeMode);
+        } else {
+          // Fallback to localStorage
+          const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+          if (storedTheme) {
+            try {
+              const parsed = JSON.parse(storedTheme) as { mode?: ThemeMode; accent?: string };
+              if (parsed.mode === 'light' || parsed.mode === 'dark') {
+                setThemeMode(parsed.mode);
+              }
+            } catch {}
+          }
+        }
+
+        // Accent color loading
+        if (typeof data.accentColor === 'string') {
+          setAccentColor(normalizeHex(data.accentColor));
+        } else {
+          // Fallback to localStorage
+          const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+          if (storedTheme) {
+            try {
+              const parsed = JSON.parse(storedTheme) as { mode?: ThemeMode; accent?: string };
+              if (typeof parsed.accent === 'string') {
+                setAccentColor(normalizeHex(parsed.accent));
+              }
+            } catch {}
+          }
+        }
+
+        // AI Settings loading
+        if (data.aiSettings) {
+          setAiSettings(data.aiSettings);
+        } else {
+          // Fallback to localStorage
+          const storedAi = localStorage.getItem('promptvault-ai-agent-settings');
+          if (storedAi) {
+            try {
+              setAiSettings(JSON.parse(storedAi) as AIAgentSettings);
+            } catch {}
+          }
+        }
       } else {
         // Fallback for browser previews
         console.warn('Electron window.api not detected, seeding mock browser memory.');
@@ -1051,7 +1096,10 @@ function App() {
   const persistDatabase = async (nextData: DatabaseData) => {
     const dataToSave = {
       ...nextData,
-      deletedPrompts: nextData.deletedPrompts !== undefined ? nextData.deletedPrompts : deletedPrompts
+      deletedPrompts: nextData.deletedPrompts !== undefined ? nextData.deletedPrompts : deletedPrompts,
+      themeMode: nextData.themeMode !== undefined ? nextData.themeMode : themeMode,
+      accentColor: nextData.accentColor !== undefined ? nextData.accentColor : accentColor,
+      aiSettings: nextData.aiSettings !== undefined ? nextData.aiSettings : aiSettings
     };
     if (window.api && window.api.setAllData) {
       try {
@@ -1334,11 +1382,15 @@ function App() {
   const filteredPrompts = getFilteredPrompts();
 
   const handleToggleTheme = () => {
-    setThemeMode(prev => (prev === 'dark' ? 'light' : 'dark'));
+    const nextMode = themeMode === 'dark' ? 'light' : 'dark';
+    setThemeMode(nextMode);
+    void persistDatabase({ prompts, categories, themeMode: nextMode });
   };
 
   const handleAccentColorChange = (newColor: string) => {
-    setAccentColor(normalizeHex(newColor));
+    const nextColor = normalizeHex(newColor);
+    setAccentColor(nextColor);
+    void persistDatabase({ prompts, categories, accentColor: nextColor });
   };
 
   // AI Agent action integration handlers
@@ -1393,14 +1445,17 @@ function App() {
 
   const handleSetThemeFromAI = (mode: 'light' | 'dark', accent?: string) => {
     setThemeMode(mode);
+    const nextAccent = accent ? normalizeHex(accent) : accentColor;
     if (accent) {
-      setAccentColor(normalizeHex(accent));
+      setAccentColor(nextAccent);
     }
+    void persistDatabase({ prompts, categories, themeMode: mode, accentColor: nextAccent });
   };
 
   const handleSaveAiSettings = (newSettings: AIAgentSettings) => {
     setAiSettings(newSettings);
     localStorage.setItem('promptvault-ai-agent-settings', JSON.stringify(newSettings));
+    void persistDatabase({ prompts, categories, aiSettings: newSettings });
     triggerNotification('AI settings saved successfully.');
   };
 

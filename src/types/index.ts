@@ -45,6 +45,9 @@ export interface DatabaseData {
   categories: Category[];
   prompts: Prompt[];
   deletedPrompts?: Prompt[];
+  themeMode?: 'light' | 'dark';
+  accentColor?: string;
+  aiSettings?: AIAgentSettings;
 }
 
 
