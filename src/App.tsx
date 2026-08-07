@@ -980,6 +980,18 @@ function App() {
     }
   };
 
+  const handleReorderCategories = async (newCategories: Category[]) => {
+    try {
+      await persistDatabase({
+        prompts,
+        categories: newCategories
+      });
+    } catch (e) {
+      console.error('Reorder categories failed:', e);
+      triggerNotification('Failed to reorder categories.', 'error');
+    }
+  };
+
   const getExportCategoriesToSelect = (): CategorySelectionItem[] => {
     const items: CategorySelectionItem[] = categories.map(cat => ({
       id: cat.id,
@@ -1037,16 +1049,20 @@ function App() {
   };
 
   const persistDatabase = async (nextData: DatabaseData) => {
+    const dataToSave = {
+      ...nextData,
+      deletedPrompts: nextData.deletedPrompts !== undefined ? nextData.deletedPrompts : deletedPrompts
+    };
     if (window.api && window.api.setAllData) {
       try {
-        window.api.setAllData(nextData);
+        window.api.setAllData(dataToSave);
       } catch (error) {
         console.warn('setAllData handler unavailable, falling back to in-memory update:', error);
       }
     }
 
-    setPrompts(nextData.prompts);
-    setCategories(nextData.categories);
+    setPrompts(dataToSave.prompts);
+    setCategories(dataToSave.categories);
   };
 
   const syncModelsFromPrompts = (importedPrompts: Prompt[], explicitCustomModels?: string[]) => {
@@ -1462,6 +1478,7 @@ function App() {
           onDeleteCategory={handleDeleteCategory}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+          onReorderCategories={handleReorderCategories}
         />
 
         {/* Main Dashboard Space */}

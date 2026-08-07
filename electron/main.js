@@ -518,6 +518,7 @@ ipcMain.on('db-set-all', (event, data) => {
   writeDatabase({
     categories: data.categories,
     prompts: data.prompts,
+    deletedPrompts: data.deletedPrompts || [],
   });
 });
 

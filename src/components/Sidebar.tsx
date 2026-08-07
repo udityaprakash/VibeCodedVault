@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { 
   LayoutGrid, Star, Pin, Plus, Trash2, 
   Download, Upload, ChevronLeft, ChevronRight,
@@ -16,6 +16,7 @@ interface SidebarProps {
   onDeleteCategory: (id: string) => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
+  onReorderCategories: (newCategories: Category[]) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -26,9 +27,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCategoryModal,
   onDeleteCategory,
   onExportBackup,
-  onImportBackup
+  onImportBackup,
+  onReorderCategories
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null) return;
+    
+    const updatedCategories = [...categories];
+    const [draggedItem] = updatedCategories.splice(draggedIndex, 1);
+    updatedCategories.splice(index, 0, draggedItem);
+    
+    onReorderCategories(updatedCategories);
+    
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
 
   return (
     <aside 
@@ -130,12 +164,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* List of Custom Categories */}
           <div className="space-y-0.5">
-            {categories.map((cat) => {
+            {categories.map((cat, idx) => {
               const isSelected = selectedCategoryId === cat.id;
+              const isDragging = draggedIndex === idx;
+              const isDragOver = dragOverIndex === idx;
               return (
                 <div 
                   key={cat.id}
-                  className="group flex items-center justify-between rounded-lg transition-all duration-150"
+                  draggable={!isCollapsed}
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDrop={(e) => handleDrop(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  className={`group flex items-center justify-between rounded-lg transition-all duration-150 relative cursor-grab active:cursor-grabbing ${
+                    isDragging ? 'opacity-40 border border-dashed border-obsidian-600 scale-[0.98] bg-obsidian-900/20' : ''
+                  } ${
+                    isDragOver ? 'border-t-2 border-cyber-violet scale-[1.02] bg-cyber-violet/5' : ''
+                  }`}
                 >
                   <button
                     onClick={() => onSelectCategory(cat.id)}
