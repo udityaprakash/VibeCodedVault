@@ -49,6 +49,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     e.preventDefault();
     if (draggedIndex === null) return;
     
+    if (draggedIndex === index) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    
     const updatedCategories = [...categories];
     const [draggedItem] = updatedCategories.splice(draggedIndex, 1);
     updatedCategories.splice(index, 0, draggedItem);
