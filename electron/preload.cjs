@@ -43,4 +43,6 @@ contextBridge.exposeInMainWorld('api', {
   updateAiAgentSettings: (settings) => ipcRenderer.invoke('update-ai-agent-settings', settings),
   onDbUpdated: (cb) => ipcRenderer.on('db-updated', () => cb()),
   onSetThemeMode: (cb) => ipcRenderer.on('set-theme-mode', (evt, payload) => cb(payload)),
+  onOpenSettings: (cb) => ipcRenderer.on('open-settings', () => cb()),
+  platform: process.platform,
 });

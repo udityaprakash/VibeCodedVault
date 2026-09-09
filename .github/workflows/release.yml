@@ -118,6 +118,8 @@ jobs:
           append_body: true
           files: |
             release/*.dmg
+            release/*.zip
+            release/*.blockmap
             release/latest-mac.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

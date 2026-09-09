@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, Notification, nativeImage } = require('electron');
+app.name = 'PromptVault';
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -294,6 +295,7 @@ function findMacInstallerAsset(assets) {
 
   return (
     assets.find(asset => typeof asset?.name === 'string' && /\.dmg$/i.test(asset.name))
+    || assets.find(asset => typeof asset?.name === 'string' && /\.zip$/i.test(asset.name))
     || null
   );
 }
@@ -540,12 +542,16 @@ function launchInstaller(installerPath) {
 }
 
 function createWindow() {
+  const isMac = process.platform === 'darwin';
+
   mainWindow = new BrowserWindow({
     width: 1240,
     height: 820,
     minWidth: 950,
     minHeight: 650,
     frame: false, // Frameless window
+    titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    trafficLightPosition: isMac ? { x: 14, y: 12 } : undefined,
     transparent: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -597,10 +603,85 @@ function createWindow() {
   });
 }
 
+function createMenu() {
+  if (process.platform === 'darwin') {
+    const template = [
+      {
+        label: app.name,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          {
+            label: 'Preferences...',
+            accelerator: 'CmdOrCtrl+,',
+            click: () => {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.show();
+                mainWindow.webContents.send('open-settings');
+              }
+            }
+          },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' }
+        ]
+      },
+      {
+        label: 'Edit',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' }
+        ]
+      },
+      {
+        label: 'View',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forceReload' },
+          { role: 'toggleDevTools' },
+          { type: 'separator' },
+          { role: 'resetZoom' },
+          { role: 'zoomIn' },
+          { role: 'zoomOut' },
+          { type: 'separator' },
+          { role: 'togglefullscreen' }
+        ]
+      },
+      {
+        label: 'Window',
+        submenu: [
+          { role: 'minimize' },
+          { role: 'zoom' },
+          { type: 'separator' },
+          { role: 'front' },
+          { type: 'separator' },
+          { role: 'window' }
+        ]
+      }
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  } else {
+    Menu.setApplicationMenu(null);
+  }
+}
+
 function createTray() {
   if (tray) return;
   const iconBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVQ4T2NkoBAwUqifAWowf//fGEZGwlhExAjmYUA/A8b/DIwMhOFrICIEqGdgYGBgYGQoADL6Cgtu86D+gNQLwuwC1GgGBgZ+DA2P0NVAwUAM8GBo+P+fAczfD1SArwH9DP8ZGBkIuxGkBmxkQO+tIIwTMBa6BvxYGP7/Z2AkDAaLwzR0A0bQDRg2j2A1cIAPQyP6u3gBAMZqQfLszT7eAAAAAElFTkSuQmCC';
   const trayIcon = nativeImage.createFromDataURL(iconBase64);
+  if (process.platform === 'darwin') {
+    trayIcon.setTemplateImage(true);
+  }
   
   tray = new Tray(trayIcon);
   const contextMenu = Menu.buildFromTemplate([
@@ -713,6 +794,7 @@ if (process.platform === 'win32') {
 // Ensure database exists
 app.whenReady().then(() => {
   initDatabase();
+  createMenu();
   createWindow();
   createTray();
 
@@ -730,7 +812,12 @@ app.whenReady().then(() => {
   setInterval(scanSchedules, 10000);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
 });
 

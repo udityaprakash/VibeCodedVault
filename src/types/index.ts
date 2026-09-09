@@ -104,6 +104,8 @@ export interface IElectronAPI {
   updateAiAgentSettings: (settings: AIAgentSettings) => Promise<boolean>;
   onDbUpdated: (cb: () => void) => void;
   onSetThemeMode: (cb: (payload: { mode: 'light' | 'dark'; accentColor?: string }) => void) => void;
+  onOpenSettings?: (cb: () => void) => void;
+  platform?: string;
 }
 
 export interface AIAgentSettings {

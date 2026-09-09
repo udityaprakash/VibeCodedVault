@@ -414,6 +414,7 @@ const DEFAULT_AI_SETTINGS: AIAgentSettings = {
 };
 
 function App() {
+  const isMac = window.api?.platform === 'darwin' || (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent));
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -500,6 +501,12 @@ function App() {
           }
         });
       }
+
+      if (window.api.onOpenSettings) {
+        window.api.onOpenSettings(() => {
+          setIsThemeSettingsOpen(true);
+        });
+      }
     }
   }, []);
 
@@ -568,6 +575,12 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         handleNewPrompt();
+      }
+
+      // Ctrl + , / Cmd + , opens theme & AI settings
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setIsThemeSettingsOpen(prev => !prev);
       }
     };
     window.addEventListener('keydown', handleGlobalKeys);
@@ -1556,7 +1569,7 @@ function App() {
               className="titlebar-nodrag flex items-center gap-1.5 bg-gradient-cyber font-semibold text-white px-4 py-2 rounded-lg text-xs shadow-glow-violet hover:opacity-90 transition-opacity cursor-pointer"
             >
               <Plus size={14} />
-              New Prompt <kbd className="hidden sm:inline bg-white/10 px-1.5 py-0.5 rounded text-[9px] font-mono ml-1.5">Ctrl+N</kbd>
+              New Prompt <kbd className="hidden sm:inline bg-white/10 px-1.5 py-0.5 rounded text-[9px] font-mono ml-1.5">{isMac ? '⌘N' : 'Ctrl+N'}</kbd>
             </button>
           </div>
 
@@ -1593,11 +1606,11 @@ function App() {
               <button
                 onClick={() => setCommandPaletteOpen(true)}
                 className="titlebar-nodrag flex items-center gap-1.5 text-[10px] text-obsidian-400 bg-obsidian-900 border border-obsidian-850 hover:border-cyber-violet px-2.5 py-1.5 rounded-lg transition-all"
-                title="Open Command Spotlight (Ctrl+K)"
+                title={isMac ? "Open Command Spotlight (⌘K)" : "Open Command Spotlight (Ctrl+K)"}
               >
                 <Terminal size={12} className="text-cyber-violet" />
                 Command Menu
-                <kbd className="bg-obsidian-850 border border-obsidian-800 px-1 py-0.5 rounded text-[8px] font-bold font-mono">Ctrl+K</kbd>
+                <kbd className="bg-obsidian-850 border border-obsidian-800 px-1 py-0.5 rounded text-[8px] font-bold font-mono">{isMac ? '⌘K' : 'Ctrl+K'}</kbd>
               </button>
             </div>
 
